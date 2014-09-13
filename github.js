@@ -27,13 +27,9 @@
 
 // Global settings /////////////////////////////////////////////////////
 
-/*global modules, localize*/
+/*global modules*/
 
 modules.github = '2014-July-31';
-
-// Global stuff
-
-var GitHubBackend;
 
 var GitHub = new GitHubBackend();
 
@@ -62,17 +58,19 @@ GitHubBackend.prototype.getProject = function (
     var myself = this;
 
     if (myself.gh === null) {
-        myself.gh = new Octokit();
+        myself.gh = new Octokat();
     }
 
-    var repo = myself.gh.getRepo(userName, projectName);
-    var branch = repo.getBranch(); // master (default)
-
-    branch.read('snap.xml', false).then(
-        function (sourceContent) {
-            callBack.call(
-                null,
-                sourceContent.content
+    myself.gh.repos(userName, projectName).contents('snap.xml').fetch().then(
+        function (file) {
+            myself.gh.repos(userName, projectName).commits.fetch().then(
+                function (commits) {
+                    callBack.call(
+                        null,
+                        atob(file.content),
+                        commits[0].sha
+                    );
+                }
             );
         },
         function (error) {
@@ -89,30 +87,26 @@ GitHubBackend.prototype.login = function (
     errorCall
 ) {
     var myself = this;
-    var me;
 
-    myself.gh = new Octokit({
-        username: username,
-        password: password
-    });
+    myself.gh = new Octokat(
+        {
+            username: username,
+            password: password
+        }
+    );
 
     if (validateData === true) {
-        me = myself.gh.getUser();
-        if (me !== null) {
-            me.getInfo().then(
-                function(info) {
-                    myself.username = username;
-                    myself.password = password;
+        myself.gh.me.repos.fetch().then(
+            function () {
+                myself.username = username;
+                myself.password = password;
 
-                    callBack.call(myself);
-                },
-                function (error) {
-                    errorCall.call(this, error, 'GitHub');
-                }
-            );
-        } else {
-            errorCall.call(myself, localize('Something went wrong :('), 'GitHub');
-        }
+                callBack.call(myself);
+            },
+            function (error) {
+                errorCall.call(this, error, 'GitHub');
+            }
+        );
     } else {
         myself.username = username;
         myself.password = password;
@@ -121,7 +115,7 @@ GitHubBackend.prototype.login = function (
     }
 };
 
-GitHubBackend.prototype.saveProject = function (commitMessage, ide, callBack, errorCall) {
+GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, ide, callBack, errorCall) {
     var myself = this,
         data;
     var pdata, media;
@@ -152,74 +146,182 @@ GitHubBackend.prototype.saveProject = function (commitMessage, ide, callBack, er
     ide.serializer.flushMedia();
 
     myself.getProjectList(
-            function (projects) {
-                var exists = false;
+        function (projects) {
+            var exists = false;
 
-                projects.forEach(function (project) {
-                    if (project.ProjectName.indexOf(repoName) > -1) {
-                        exists = true;
-                        return;
-                    }
-                });
+            projects.forEach(function (project) {
+                if (project.ProjectName.indexOf(repoName) > -1) {
+                    exists = true;
+                    return;
+                }
+            });
 
-                function pushChanges () {
-                    if (myself.gh !== null) {
-                        var repo = myself.gh.getRepo(myself.username, ide.projectName);
-                        var branch = repo.getBranch(); // master (default)
-                        var message = commitMessage;
-
-                        var contents = {
-                            'snap.xml': data,
-                            'README.md': ide.projectNotes
-                        };
-
-                        branch.writeMany(contents, message).then(
-                            function () {
-                                callBack.call();
+            pushChanges = function () {
+                if (myself.gh !== null) {
+                    writeChanges = function (code, pcSha) {
+                        myself.upload([
+                            {
+                                "name": "snap.xml",
+                                "data": data
                             },
+                            {
+                                "name": "README.md",
+                                "data": ide.projectNotes
+                            }], ide.projectName, pcSha, commitMessage,
+                            function (commit) {
+                                myself.gh.repos(myself.username, ide.projectName).compare(pcSha, commit.sha).fetch().then(
+                                    function (result) {
+                                        var newcode = "", newnotes = "";
+                                        var dmp = new diff_match_patch();
+                                        var patch, text;
+
+                                        result.files.forEach(
+                                            function (file) {
+                                                text = file.patch.replace(/\\ No newline at end of file/g, '');
+                                                if (file.filename === "snap.xml") {
+                                                    patch = dmp.patch_fromText(text);
+                                                    newcode = dmp.patch_apply(patch, code)[0];
+                                                } else if (file.filename === "README.md") {
+                                                    patch = dmp.patch_fromText(text);
+                                                    newnotes = dmp.patch_apply(patch, code)[0];
+                                                }
+                                            }
+                                        );
+
+                                        myself.upload([
+                                            {
+                                                "name": "snap.xml",
+                                                "data": newcode
+                                            },
+                                            {
+                                                "name": "README.md",
+                                                "data": newnotes
+                                            }], ide.projectName, commit.sha, commitMessage,
+                                            function (commit) {
+                                                myself.gh.repos(myself.username, ide.projectName).git.refs('heads/master').update({sha: commit.sha}).then(
+                                                    function () {
+                                                        callBack.call();
+                                                    }
+                                                );
+                                            }
+                                        );
+                                    }
+                                );
+                            }
+                        );
+                    };
+
+
+
+                    if (parentCommitSha !== null) { // repo was just created
+                        myself.getProject(myself.username, ide.projectName,
+                            writeChanges,
                             function (error) {
                                 errorCall.call(this, error, 'GitHub');
                             }
                         );
+                    } else {
+                        myself.gh.repos(myself.username, ide.projectName).commits.fetch().then(
+                            function (commits) {
+                                writeChanges(data, commits[0].sha);
+                            }
+                        );
                     }
                 }
+            };
 
-                if (exists === false){
-                    myself.gh.getUser().createRepo(repoName, { // these should be discussed
-                        'description': 'Snap! Project - http://gubolin.github.io/snap/index.html#github:Username=' + myself.username + '&projectName=' + repoName,
-                        'has_wiki': 'false',
-                        'has_downloads': 'false',
-                        'auto_init': true,
-                        'license_template': 'mit' // discuss
-                    }).then(
-                        pushChanges,
-                        function (error) {
-                            errorCall.call(this, error, 'GitHub');
-                        }
-                    );
-                } else {
-                    pushChanges();
-                }
-
-            },
-            function (error) {
-                errorCall.call(null, error, 'GitHub');
+            if (exists === false){
+                myself.gh.me.repos.create({ // these should be discussed
+                    'name': repoName,
+                    'description': 'Snap! Project - http://gubolin.github.io/snap/index.html#github:Username=' + myself.username + '&projectName=' + repoName,
+                    'has_wiki': 'false',
+                    'has_downloads': 'false',
+                    'auto_init': true,
+                    'license_template': 'mit' // discuss
+                }).then(
+                    pushChanges,
+                    function (error) {
+                        errorCall.call(this, error, 'GitHub');
+                    }
+                );
+            } else {
+                pushChanges();
             }
+
+        },
+        function (error) {
+            errorCall.call(null, error, 'GitHub');
+        }
     );
+};
+
+GitHubBackend.prototype.upload = function (dataArr, projectName, pcSha, commitMessage, callBack) {
+    var myself = this;
+    var blobShas = [];
+
+    var modCallBack = (function () {
+        var called = 0;
+        return function () {
+            if (++called == dataArr.length) {
+                createTree();
+            }
+        };
+    })();
+
+    dataArr.forEach(
+        function (data) {
+            myself.gh.repos(myself.username, projectName).git.blobs.create({
+                "content": data.data,
+                "encoding": "utf-8"
+            }).then(
+                function (blob) {
+                    blobShas.push({'sha': blob.sha, 'name': data.name});
+                    modCallBack();
+                }
+            );
+        }
+    );
+
+    var createTree = function () {
+        myself.gh.repos(myself.username, projectName).git.commits(pcSha).fetch().then(
+            function (parentCommit) {
+                var tree = [];
+                blobShas.forEach(
+                    function (blob) {
+                        tree.push(
+                            {
+                                "path": blob.name,
+                                "mode": "100644",
+                                "type": "blob",
+                                "sha": blob.sha
+                            }
+                        );
+                    }
+                );
+
+                myself.gh.repos(myself.username, projectName).git.trees.create({
+                    "tree": tree,
+                    "base_tree": parentCommit.tree.sha
+                }).then(
+                function (tree) {
+                        var message = commitMessage ? commitMessage : "Meow!";
+                        myself.gh.repos(myself.username, projectName).git.commits.create({
+                            "message": message,
+                            "tree": tree.sha,
+                            "parents": [parentCommit.sha]
+                        }).then(callBack);
+                    }
+                );
+            }
+        );
+    };
 };
 
 GitHubBackend.prototype.getProjectList = function (callBack, errorCall) {
     var myself = this;
 
     if (myself.gh !== null){
-        var user = myself.gh.getUser();
-
-        if (user === null) {
-            myself.message('You are not logged in');
-            return;
-        }
-
-        user.getRepos().then(
+        myself.gh.me.repos.fetch().then(
                 function (repos) {
                     var snapProjects = [];
 
@@ -234,17 +336,14 @@ GitHubBackend.prototype.getProjectList = function (callBack, errorCall) {
 
                     repos.forEach(function (repo) {
                         if (repo.description.indexOf('Snap! Project') > -1) { // TODO nicer detection
-                            var project, ghrepo, branch;
+                            var project;
                             
-                            ghrepo = myself.gh.getRepo(repo.owner.login, repo.name);
-                            branch = ghrepo.getBranch(); // master (default)
-
-                            branch.read('README.md', false).then(
+                            myself.gh.repos(repo.owner.login, repo.name).contents('README.md').fetch().then(
                                 function (notesContent) {
                                     project = {
                                         'ProjectName': repo.name,
-                                        'Notes': notesContent.content,
-                                        'Updated': repo.updated_at.replace(/T/, ' ').replace(/Z/, '') // TODO this could be better
+                                        'Notes': atob(notesContent.content),
+                                        'Updated': repo.updatedAt.toString()
                                     };
 
                                     snapProjects.push(project);
@@ -271,6 +370,7 @@ GitHubBackend.prototype.getProjectList = function (callBack, errorCall) {
 
 GitHubBackend.prototype.logout = function (callBack) {
     this.clear();
+    callBack.call();
 };
 
 // GitHub: user messages (to be overridden)

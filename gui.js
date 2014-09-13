@@ -221,6 +221,7 @@ IDE_Morph.prototype.init = function (isAutoFill) {
     this.stageRatio = 1; // for IDE animations, e.g. when zooming
 
     this.loadNewProject = false; // flag when starting up translated
+    this.parentCommitSha = null; // for GitHub
     this.shield = null;
 
     // initialize inherited properties:
@@ -401,13 +402,14 @@ IDE_Morph.prototype.openIn = function (world) {
             GitHub.getProject(
                 dict.Username,
                 dict.projectName,
-                function (code) {
+                function (code, pcSha) {
                     var msg;
                     myself.nextSteps([
                         function () {
                             msg = myself.showMessage('Opening GitHub project...');
                         },
                         function () {
+                            myself.parentCommitSha = pcSha;
                             myself.rawOpenCloudDataString(code);
                             myself.hasChangedMedia = true;
                         },
@@ -3935,13 +3937,15 @@ IDE_Morph.prototype.saveProjectToGitHub = function (name, commitMessage) {
         this.setProjectName(name);
         GitHub.saveProject(
             commitMessage,
+            this.parentCommitSha,
             this,
             function () {
                 GitHub.getProject(
                     GitHub.username,
                     name, 
-                    function (code) {
+                    function (code, pcSha) {
                         myself.source = 'github';
+                        myself.parentCommitSha = pcSha;
                         myself.droppedText(code);
                     },
                     myself.githubError()
@@ -5072,8 +5076,9 @@ ProjectDialogMorph.prototype.rawOpenGitHubProject = function (proj, user) {
     GitHub.getProject(
         user,
         proj.ProjectName, 
-        function (code) {
+        function (code, pcSha) {
             myself.ide.source = 'github';
+            myself.ide.parentCommitSha = pcSha;
             myself.ide.droppedText(code);
         },
         myself.ide.githubError()
@@ -5171,6 +5176,7 @@ ProjectDialogMorph.prototype.saveGitHubProject = function () {
     this.ide.showMessage('Committing project\nto GitHub...');
     GitHub.saveProject(
         null,
+        this.ide.parentCommitSha,
         this.ide,
         function () {
             myself.ide.source = 'github';
