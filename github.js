@@ -175,15 +175,20 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
                                                                     var parentCode = atob(parentCodeFile.content), parentNotes = atob(parentNotesFile.content);
                                                                     var headCode = atob(headCodeFile.content), headNotes = atob(headNoteFile.content);
                                                                     var dmp = new diff_match_patch();
-                                                                    dmp.Match_Threshold = 0.1;
-                                                                    var codeDiff, noteDiff;
+                                                                    //dmp.Match_Threshold = 0.1;
+                                                                    var codeDiff, codeDiffs;
                                                                     var codePatch, notePatch;
 
                                                                     // diff parent <-> local
-                                                                    codeDiff = dmp.diff_main(parentCode, localCode);
-                                                                    noteDiff = dmp.diff_main(parentNotes, localNotes);
-                                                                    codePatch = dmp.patch_make(codeDiff);
-                                                                    notePatch = dmp.patch_make(noteDiff);
+                                                                    codeDiff = dmp.diff_linesToChars_(parentCode, localCode);
+                                                                    console.log('converted ' + JSON.stringify(codeDiff));//DEBUG
+                                                                    codeDiffs = dmp.diff_main(codeDiff.chars1, codeDiff.chars2, false);
+                                                                    console.log('diffed');//DEBUG
+                                                                    dmp.diff_charsToLines_(codeDiffs, codeDiff.lineArray);
+                                                                    console.log('creating patch');//DEBUG
+                                                                    codePatch = dmp.patch_make(codeDiffs);
+
+                                                                    notePatch = dmp.patch_make(parentNotes, localNotes);
                                                                     console.log(JSON.stringify(codePatch));//DEBUG
                                                                     // patch (parent<->local) => head
                                                                     localCode = dmp.patch_apply(codePatch, headCode);
