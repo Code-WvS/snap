@@ -125,7 +125,7 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
     pdata = ide.serializer.serialize(ide.stage);
     media = ide.hasChangedMedia ?
             ide.serializer.mediaXML(ide.projectName) : null;
-    data = '<snapdata>' + pdata + media + '</snapdata>';
+    data = '<snapdata>\n' + pdata + '\n' + media + '\n</snapdata>';
 
     // check if serialized data can be parsed back again
     try {
@@ -175,6 +175,7 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
                                                                     var parentCode = atob(parentCodeFile.content), parentNotes = atob(parentNotesFile.content);
                                                                     var headCode = atob(headCodeFile.content), headNotes = atob(headNoteFile.content);
                                                                     var dmp = new diff_match_patch();
+                                                                    dmp.Match_Threshold = 0.1;
                                                                     var codeDiff, noteDiff;
                                                                     var codePatch, notePatch;
 
