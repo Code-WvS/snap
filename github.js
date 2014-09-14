@@ -179,10 +179,14 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
                                                                     // diff parent <-> local
                                                                     codePatch = dmp.patch_make(parentCode, localCode);
                                                                     notePatch = dmp.patch_make(parentNotes, localNotes);
-                                                                    console.log(dmp.patch_toText(codePatch));//DEBUG
+                                                                    console.log(JSON.stringify(codePatch));//DEBUG
                                                                     // patch (parent<->local) => head
-                                                                    localCode = dmp.patch_apply(codePatch, headCode)[0];
-                                                                    localNotes = dmp.patch_apply(notePatch, headNotes)[0];
+                                                                    localCode = dmp.patch_apply(codePatch, headCode);
+                                                                    localNotes = dmp.patch_apply(notePatch, headNotes);
+                                                                    console.log('Code patched successfully? ' + localCode[1]);
+                                                                    console.log('Notes patched successfully? ' + localNotes[1]);
+                                                                    localCode = localCode[0];
+                                                                    localNotes = localNotes[0];
 
                                                                     // perform a `git merge`
                                                                     // TODO TODO TODO 422 Not a fast-forward
