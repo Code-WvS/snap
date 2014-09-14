@@ -3933,7 +3933,7 @@ IDE_Morph.prototype.saveProjectToCloud = function (name) {
 IDE_Morph.prototype.saveProjectToGitHub = function (name, commitMessage) {
     var myself = this;
     if (name) {
-        this.showMessage('Comitting project\nto GitHub...');
+        this.showMessage('Committing project\nto GitHub...');
         this.setProjectName(name);
         GitHub.saveProject(
             commitMessage,
