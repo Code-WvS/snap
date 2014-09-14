@@ -150,7 +150,8 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
             var exists = false;
 
             projects.forEach(function (project) {
-                if (project.ProjectName.indexOf(repoName) > -1) {
+                if (project.ProjectName.indexOf(repoName) > -1) { // FIXME 1) create "Foobar" 2) create "Foo" -> error
+                    // indexOf: bad idea
                     exists = true;
                     return;
                 }
@@ -174,11 +175,14 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
                                                                     var parentCode = atob(parentCodeFile.content), parentNotes = atob(parentNotesFile.content);
                                                                     var headCode = atob(headCodeFile.content), headNotes = atob(headNoteFile.content);
                                                                     var dmp = new diff_match_patch();
+                                                                    var codeDiff, noteDiff;
                                                                     var codePatch, notePatch;
 
                                                                     // diff parent <-> local
-                                                                    codePatch = dmp.patch_make(parentCode, localCode);
-                                                                    notePatch = dmp.patch_make(parentNotes, localNotes);
+                                                                    codeDiff = dmp.diff_main(parentCode, localCode);
+                                                                    noteDiff = dmp.diff_main(parentNotes, localNotes);
+                                                                    codePatch = dmp.patch_make(codeDiff);
+                                                                    notePatch = dmp.patch_make(noteDiff);
                                                                     console.log(JSON.stringify(codePatch));//DEBUG
                                                                     // patch (parent<->local) => head
                                                                     localCode = dmp.patch_apply(codePatch, headCode);
@@ -271,7 +275,6 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
             } else {
                 pushChanges(data, parentCommitSha);
             }
-
         },
         function (error) {
             errorCall.call(null, error, 'GitHub');
