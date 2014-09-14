@@ -97,7 +97,7 @@ XML_Serializer.prototype.serialize = function (object) {
     this.flushMedia();
     xml = this.store(object);
     this.flush();
-    return vkbeautify.xml(xml);
+    return xml;
 };
 
 XML_Serializer.prototype.store = function (object, mediaID) {
@@ -135,7 +135,7 @@ XML_Serializer.prototype.mediaXML = function () {
         );
         xml = xml + str;
     });
-    return vkbeautify.xml(xml + '</media>');
+    return xml + '</media>';
 };
 
 XML_Serializer.prototype.add = function (object) {

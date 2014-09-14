@@ -156,70 +156,88 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
                 }
             });
 
-            pushChanges = function () {
+            pushChanges = function (codeData, parentCSha) {
                 if (myself.gh !== null) {
                     writeChanges = function (code, pcSha) {
-                        myself.upload([
-                            {
-                                "name": "snap.xml",
-                                "data": data
-                            },
-                            {
-                                "name": "README.md",
-                                "data": ide.projectNotes
-                            }], ide.projectName, pcSha, commitMessage,
-                            function (commit) {
-                                myself.gh.repos(myself.username, ide.projectName).compare(pcSha, commit.sha).fetch().then(
-                                    function (result) {
-                                        var newcode = "", newnotes = "";
-                                        var dmp = new diff_match_patch();
-                                        var patch, text;
+                        myself.gh.repos(myself.username, ide.projectName).commits.fetch().then(
+                            function (commits) {
+                                if (commits[0].sha !== pcSha) { // if the local copy is outdated
+                                    myself.gh.repos(myself.username, ide.projectName).contents('snap.xml').fetch({ref: pcSha}).then(
+                                        function (parentCodeFile) {
+                                            myself.gh.repos(myself.username, ide.projectName).contents('README.md').fetch({ref: pcSha}).then(
+                                                function (parentNotesFile) {
+                                                    myself.gh.repos(myself.username, ide.projectName).contents('snap.xml').fetch().then(
+                                                        function (headCodeFile) {
+                                                            myself.gh.repos(myself.username, ide.projectName).contents('README.md').fetch().then(
+                                                                function (headNoteFile) {
+                                                                    var localCode = codeData, localNotes = ide.projectNotes;
+                                                                    var parentCode = atob(parentCodeFile.content), parentNotes = atob(parentNotesFile.content);
+                                                                    var headCode = atob(headCodeFile.content), headNotes = atob(headNoteFile.content);
+                                                                    var dmp = new diff_match_patch();
+                                                                    var codePatch, notePatch;
 
-                                        result.files.forEach(
-                                            function (file) {
-                                                text = file.patch.replace(/\\ No newline at end of file/g, '');
-                                                if (file.filename === "snap.xml") {
-                                                    patch = dmp.patch_fromText(text);
-                                                    newcode = dmp.patch_apply(patch, code)[0];
-                                                } else if (file.filename === "README.md") {
-                                                    patch = dmp.patch_fromText(text);
-                                                    newnotes = dmp.patch_apply(patch, code)[0];
+                                                                    // diff parent <-> local
+                                                                    codePatch = dmp.patch_make(parentCode, localCode);
+                                                                    notePatch = dmp.patch_make(parentNotes, localNotes);
+                                                                    console.log(dmp.patch_toText(codePatch));//DEBUG
+                                                                    // patch (parent<->local) => head
+                                                                    localCode = dmp.patch_apply(codePatch, headCode)[0];
+                                                                    localNotes = dmp.patch_apply(notePatch, headNotes)[0];
+
+                                                                    // perform a `git merge`
+                                                                    // TODO TODO TODO 422 Not a fast-forward
+
+                                                                    myself.upload([
+                                                                        {
+                                                                            "name": "snap.xml",
+                                                                            "data": localCode
+                                                                        },
+                                                                        {
+                                                                            "name": "README.md",
+                                                                        "data": localNotes
+                                                                        }], ide.projectName, commits[0].sha, commitMessage,
+                                                                        function (mergecommit) {
+                                                                            myself.gh.repos(myself.username, ide.projectName).git.refs('heads/master').update({sha: mergecommit.sha}).then(
+                                                                                function () {
+                                                                                    callBack.call();
+                                                                                }
+                                                                            );
+                                                                        }
+                                                                    );
+                                                                }
+                                                            );
+                                                        }
+                                                    );
                                                 }
-                                            }
-                                        );
-
-                                        myself.upload([
-                                            {
-                                                "name": "snap.xml",
-                                                "data": newcode
-                                            },
-                                            {
-                                                "name": "README.md",
-                                                "data": newnotes
-                                            }], ide.projectName, commit.sha, commitMessage,
-                                            function (commit) {
-                                                myself.gh.repos(myself.username, ide.projectName).git.refs('heads/master').update({sha: commit.sha}).then(
-                                                    function () {
-                                                        callBack.call();
-                                                    }
-                                                );
-                                            }
-                                        );
-                                    }
-                                );
+                                            );
+                                        }
+                                    );
+                                } else {
+                                    // Fast-forward
+                                    myself.upload([
+                                        {
+                                            "name": "snap.xml",
+                                            "data": data
+                                        },
+                                        {
+                                            "name": "README.md",
+                                            "data": ide.projectNotes
+                                        }], ide.projectName, pcSha, commitMessage,
+                                        function (commit) {
+                                            myself.gh.repos(myself.username, ide.projectName).git.refs('heads/master').update({sha: commit.sha}).then(
+                                                function () {
+                                                    callBack.call();
+                                                }
+                                            );
+                                        }
+                                    );
+                                }
                             }
                         );
                     };
 
-
-
-                    if (parentCommitSha !== null) { // repo was just created
-                        myself.getProject(myself.username, ide.projectName,
-                            writeChanges,
-                            function (error) {
-                                errorCall.call(this, error, 'GitHub');
-                            }
-                        );
+                    if (parentCSha !== null) { // repo was just created
+                        writeChanges(codeData, parentCSha);
                     } else {
                         myself.gh.repos(myself.username, ide.projectName).commits.fetch().then(
                             function (commits) {
@@ -239,13 +257,15 @@ GitHubBackend.prototype.saveProject = function (commitMessage, parentCommitSha, 
                     'auto_init': true,
                     'license_template': 'mit' // discuss
                 }).then(
-                    pushChanges,
+                    function () {
+                        pushChanges(data, null);
+                    },
                     function (error) {
                         errorCall.call(this, error, 'GitHub');
                     }
                 );
             } else {
-                pushChanges();
+                pushChanges(data, parentCommitSha);
             }
 
         },
