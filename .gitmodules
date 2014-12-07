@@ -1,3 +1,12 @@
 [submodule "Snapin8r"]
 	path = Snapin8r
 	url = https://github.com/Hardmath123/Snapin8r
+[submodule "octokit.js"]
+	path = octokit.js
+	url = https://github.com/philschatz/octokit.js
+[submodule "vkBeautify"]
+	path = vkBeautify
+	url = https://github.com/vkiryukhin/vkBeautify
+[submodule "diff-merge"]
+	path = diff-merge
+	url = https://github.com/nighca/diff-merge
