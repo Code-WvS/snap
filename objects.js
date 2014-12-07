@@ -3272,9 +3272,7 @@ Morph.prototype.setPosition = function (aPoint, justMe) {
     // override the inherited default to make sure my parts follow
     // unless it's justMe
     var delta = aPoint.subtract(this.topLeft());
-    if ((delta.x !== 0) || (delta.y !== 0)) {
-        this.moveBy(delta, justMe);
-    }
+    this.moveBy(delta, justMe);
 };
 
 SpriteMorph.prototype.forward = function (steps) {
