@@ -3455,6 +3455,12 @@ IDE_Morph.prototype.setLanguage = function (lang, callback) {
 IDE_Morph.prototype.reflectLanguage = function (lang, callback) {
     var projectData;
     SnapTranslator.language = lang;
+    this.world().children.forEach(function (morph) {
+        if (morph instanceof BlockEditorMorph) {
+            morph.updateDefinition(); // save custom blocks
+            // otherwise, initBlocks() will reset the definition
+        }
+    });
     if (!this.loadNewProject) {
         if (Process.prototype.isCatchingErrors) {
             try {
