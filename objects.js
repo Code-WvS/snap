@@ -459,6 +459,23 @@ SpriteMorph.prototype.initBlocks = function () {
             category: 'sound',
             spec: 'stop all sounds'
         },
+        doSetVolume: {
+            type: 'command',
+            category: 'sound',
+            spec: 'set volume to %n %',
+            defaults: [100]
+        },
+        doChangeVolume: {
+            type: 'command',
+            category: 'sound',
+            spec: 'change volume by %n',
+            defaults: [-10]
+        },
+        reportVolume: {
+            type: 'reporter',
+            category: 'sound',
+            spec: 'volume'
+        },
         doRest: {
             type: 'command',
             category: 'sound',
@@ -1345,6 +1362,8 @@ SpriteMorph.prototype.init = function (globals) {
     this.version = Date.now(); // for observer optimization
     this.isClone = false; // indicate a "temporary" Scratch-style clone
     this.cloneOriginName = '';
+    this.volume = 100;
+    this.activeSounds = [];
 
     // sprite nesting properties
     this.parts = []; // not serialized, only anchor (name)
@@ -1817,6 +1836,11 @@ SpriteMorph.prototype.blockTemplates = function (category) {
         blocks.push(block('playSound'));
         blocks.push(block('doPlaySoundUntilDone'));
         blocks.push(block('doStopAllSounds'));
+        blocks.push('-');
+        blocks.push(block('doSetVolume'));
+        blocks.push(block('doChangeVolume'));
+        blocks.push(watcherToggle('reportVolume'));
+        blocks.push(block('reportVolume'));
         blocks.push('-');
         blocks.push(block('doRest'));
         blocks.push('-');
@@ -2645,7 +2669,8 @@ SpriteMorph.prototype.reportCostumes = function () {
 // SpriteMorph sound management
 
 SpriteMorph.prototype.addSound = function (audio, name) {
-    this.sounds.add(new Sound(audio, name));
+    var volume = this.volume;
+    this.sounds.add(new Sound(audio, name, volume));
 };
 
 SpriteMorph.prototype.playSound = function (name) {
@@ -2656,7 +2681,18 @@ SpriteMorph.prototype.playSound = function (name) {
         ),
         active;
     if (sound) {
+        sound.volume = this.volume;
         active = sound.play();
+
+        if (stage.muted === true) {
+            active.volume = 0;
+        }
+
+        this.activeSounds.push(active);
+        this.activeSounds = this.activeSounds.filter(function (aud) {
+            return !aud.ended && !aud.terminated;
+        });
+
         if (stage) {
             stage.activeSounds.push(active);
             stage.activeSounds = stage.activeSounds.filter(function (aud) {
@@ -2665,6 +2701,34 @@ SpriteMorph.prototype.playSound = function (name) {
         }
         return active;
     }
+};
+
+SpriteMorph.prototype.doSetVolume = function (val) {
+    var myself = this;
+    myself.volume = Math.min(Math.max(0, val), 100);
+
+    if (myself.parentThatIsA(StageMorph).muted === true) {
+        return;
+    }
+
+    myself.activeSounds.forEach(function (snd) {
+        snd.volume = myself.volume / 100; // 'audio' objects
+    });
+};
+
+SpriteMorph.prototype.doChangeVolume = function (val) {
+    this.doSetVolume(this.volume + val);
+};
+
+SpriteMorph.prototype.reportVolume = function () {
+    return this.volume;
+}
+
+SpriteMorph.prototype.unmuteAllSounds = function () {
+    var stage = this.parentThatIsA(StageMorph);
+    stage.muted = false;
+
+    this.doSetVolume(this.volume);
 };
 
 SpriteMorph.prototype.reportSounds = function () {
@@ -4332,6 +4396,8 @@ StageMorph.prototype.init = function (globals) {
     this.version = Date.now(); // for observers
     this.isFastTracked = false;
     this.cloneCount = 0;
+    this.volume = 100;
+    this.muted = false;
 
     this.timerStart = Date.now();
     this.tempo = 60; // bpm
@@ -4869,7 +4935,7 @@ StageMorph.prototype.fireGreenFlagEvent = function () {
 
 StageMorph.prototype.fireStopAllEvent = function () {
     var ide = this.parentThatIsA(IDE_Morph);
-    this.threads.resumeAll(this.stage);
+    //this.threads.resumeAll(this.stage); // leads to a strange Note bug
     this.keysPressed = {};
     this.threads.stopAll();
     this.stopAllActiveSounds();
@@ -5022,6 +5088,11 @@ StageMorph.prototype.blockTemplates = function (category) {
         blocks.push(block('playSound'));
         blocks.push(block('doPlaySoundUntilDone'));
         blocks.push(block('doStopAllSounds'));
+        blocks.push('-');
+        blocks.push(block('doSetVolume'));
+        blocks.push(block('doChangeVolume'));
+        blocks.push(watcherToggle('reportVolume'));
+        blocks.push(block('reportVolume'));
         blocks.push('-');
         blocks.push(block('doRest'));
         blocks.push('-');
@@ -5565,6 +5636,15 @@ StageMorph.prototype.addSound
 StageMorph.prototype.playSound
     = SpriteMorph.prototype.playSound;
 
+StageMorph.prototype.doSetVolume
+    = SpriteMorph.prototype.doSetVolume;
+
+StageMorph.prototype.doChangeVolume
+    = SpriteMorph.prototype.doChangeVolume;
+
+StageMorph.prototype.reportVolume
+    = SpriteMorph.prototype.reportVolume;
+
 StageMorph.prototype.stopAllActiveSounds = function () {
     this.activeSounds.forEach(function (audio) {
         audio.pause();
@@ -5579,10 +5659,28 @@ StageMorph.prototype.pauseAllActiveSounds = function () {
 };
 
 StageMorph.prototype.resumeAllActiveSounds = function () {
+    var newSounds = []; // remove Sounds that have been played so they do not resume
+
     this.activeSounds.forEach(function (audio) {
-        audio.play();
+        if (audio.ended === false) {
+            newSounds.push(audio);
+            audio.play();
+        }
+    });
+
+    this.activeSounds = newSounds;
+};
+
+StageMorph.prototype.muteAllSounds = function () {
+    this.muted = true;
+
+    this.activeSounds.forEach(function (audio) {
+        audio.volume = 0;
     });
 };
+
+StageMorph.prototype.unmuteAllSounds
+    = SpriteMorph.prototype.unmuteAllSounds;
 
 StageMorph.prototype.reportSounds
     = SpriteMorph.prototype.reportSounds;
@@ -6334,9 +6432,10 @@ CostumeEditorMorph.prototype.mouseMove
 
 // Sound instance creation
 
-function Sound(audio, name) {
+function Sound(audio, name, volume) {
     this.audio = audio; // mandatory
     this.name = name || "Sound";
+    this.volume = volume || 100;
 }
 
 Sound.prototype.play = function () {
@@ -6344,6 +6443,7 @@ Sound.prototype.play = function () {
     // externally (i.e. by the stage)
     var aud = document.createElement('audio');
     aud.src = this.audio.src;
+    aud.volume = Math.min(Math.max(0, this.volume), 100) / 100;
     aud.play();
     return aud;
 };
@@ -6353,7 +6453,8 @@ Sound.prototype.copy = function () {
         cpy;
 
     snd.src = this.audio.src;
-    cpy = new Sound(snd, this.name ? copy(this.name) : null);
+    snd.volume = this.volume;
+    cpy = new Sound(snd, this.name ? copy(this.name) : null, this.volume ? copy(this.volume) : null);
     return cpy;
 };
 
@@ -6367,8 +6468,9 @@ Sound.prototype.toDataURL = function () {
 
 // Note instance creation
 
-function Note(pitch) {
+function Note(pitch, volume) {
     this.pitch = pitch === 0 ? 0 : pitch || 69;
+    this.volume = volume;
     this.setupContext();
     this.oscillator = null;
 }
@@ -6399,12 +6501,13 @@ Note.prototype.setupContext = function () {
     }
     Note.prototype.audioContext = new AudioContext();
     Note.prototype.gainNode = Note.prototype.audioContext.createGain();
-    Note.prototype.gainNode.gain.value = 0.25; // reduce volume by 1/4
 };
 
 // Note playing
 
 Note.prototype.play = function () {
+    this.gainNode.gain.value = 0.25 * this.volume / 100; // reduce volume by 1/4
+
     this.oscillator = this.audioContext.createOscillator();
     if (!this.oscillator.start) {
         this.oscillator.start = this.oscillator.noteOn;
@@ -6419,6 +6522,12 @@ Note.prototype.play = function () {
     this.gainNode.connect(this.audioContext.destination);
     this.oscillator.start(0);
 };
+
+Note.prototype.setVolume = function (volume) {
+    this.stop();
+    this.volume = volume;
+    this.play();
+}
 
 Note.prototype.stop = function () {
     if (this.oscillator) {
