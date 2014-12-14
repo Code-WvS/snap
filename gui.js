@@ -228,6 +228,8 @@ IDE_Morph.prototype.init = function (isAutoFill) {
 
     // override inherited properites:
     this.color = this.backgroundColor;
+
+    setInterval(this.save, 1000 * 60 * 60 * 5); // every 5 minutes
 };
 
 IDE_Morph.prototype.openIn = function (world) {
