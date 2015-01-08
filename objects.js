@@ -125,7 +125,7 @@ PrototypeHatBlockMorph*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.objects = '2014-December-04';
+modules.objects = '2014-December-17';
 
 var SpriteMorph;
 var StageMorph;
@@ -836,6 +836,12 @@ SpriteMorph.prototype.initBlocks = function () {
             type: 'reporter',
             category: 'sensing',
             spec: 'frames'
+        },
+        reportThreadCount: {
+            dev: true,
+            type: 'reporter',
+            category: 'sensing',
+            spec: 'processes'
         },
         doAsk: {
             type: 'command',
@@ -1995,6 +2001,8 @@ SpriteMorph.prototype.blockTemplates = function (category) {
             txt.setColor(this.paletteTextColor);
             blocks.push(txt);
             blocks.push('-');
+            blocks.push(watcherToggle('reportThreadCount'));
+            blocks.push(block('reportThreadCount'));
             blocks.push(block('colorFiltered'));
             blocks.push(block('reportStackSize'));
             blocks.push(block('reportFrameCount'));
@@ -3716,6 +3724,16 @@ SpriteMorph.prototype.reportMouseY = function () {
     return 0;
 };
 
+// SpriteMorph thread count (for debugging)
+
+SpriteMorph.prototype.reportThreadCount = function () {
+    var stage = this.parentThatIsA(StageMorph);
+    if (stage) {
+        return stage.threads.processes.length;
+    }
+    return 0;
+};
+
 // SpriteMorph variable watchers (for palette checkbox toggling)
 
 SpriteMorph.prototype.findVariableWatcher = function (varName) {
@@ -5225,6 +5243,8 @@ StageMorph.prototype.blockTemplates = function (category) {
             txt.setColor(this.paletteTextColor);
             blocks.push(txt);
             blocks.push('-');
+            blocks.push(watcherToggle('reportThreadCount'));
+            blocks.push(block('reportThreadCount'));
             blocks.push(block('colorFiltered'));
             blocks.push(block('reportStackSize'));
             blocks.push(block('reportFrameCount'));
@@ -5701,6 +5721,9 @@ StageMorph.prototype.watcherFor =
 
 StageMorph.prototype.getLastAnswer
     = SpriteMorph.prototype.getLastAnswer;
+
+StageMorph.prototype.reportThreadCount
+    = SpriteMorph.prototype.reportThreadCount;
 
 // StageMorph message broadcasting
 
@@ -6961,7 +6984,7 @@ WatcherMorph.prototype.object = function () {
 WatcherMorph.prototype.isGlobal = function (selector) {
     return contains(
         ['getLastAnswer', 'getKeysPressed', 'getLastMessage', 'getTempo', 'getTimer',
-             'reportMouseX', 'reportMouseY'],
+             'reportMouseX', 'reportMouseY', 'reportThreadCount'],
         selector
     );
 };
