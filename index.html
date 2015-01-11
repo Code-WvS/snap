@@ -21,16 +21,26 @@
                 <script type="text/javascript" src="octokit.js/octokit.js"></script>
                 <script type="text/javascript" src="github.js"></script>
 		<script type="text/javascript" src="sha512.js"></script>
+<<<<<<< HEAD
                 <script type="text/javascript" src="Snapin8r/snapin8r.min.js"></script>
                 <script type="text/javascript" src="vkBeautify/vkbeautify.js"></script>
                 <script type="text/javascript" src="diff-merge/dist/diff.js"></script>
+=======
+
+>>>>>>> mobileapp
 		<script type="text/javascript">
 			var world;
 			window.onload = function () {
 				world = new WorldMorph(document.getElementById('world'));
                 world.worldCanvas.focus();
+<<<<<<< HEAD
 				new IDE_Morph().openIn(world);
 				setInterval(loop, 10);
+=======
+				var ide = new IDE_Morph()
+                                ide.openIn(world);
+				setInterval(loop, 1);
+>>>>>>> mobileapp
 			};
 			function loop() {
 				world.doOneCycle();

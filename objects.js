@@ -415,6 +415,11 @@ SpriteMorph.prototype.initBlocks = function () {
             spec: 'go back %n layers',
             defaults: [1]
         },
+        doNotify: {
+            type: 'command',
+            category: 'looks',
+            spec: 'notification with title %s and content %s'
+        },
         doScreenshot: {
             type: 'command',
             category: 'looks',
@@ -932,6 +937,31 @@ SpriteMorph.prototype.initBlocks = function () {
             type: 'reporter',
             category: 'sensing',
             spec: 'current %dates'
+        },
+        doVibrate: {
+            type: 'command',
+            category: 'sensing',
+            spec: 'vibrate %n seconds'
+        },
+        reportCompassHeading: {
+            type: 'reporter',
+            category: 'sensing',
+            spec: 'current compass heading'
+        },
+        reportAccelerationX: {
+            type: 'reporter',
+            category: 'sensing',
+            spec: 'current acceleration along the x axes'
+        },
+        reportAccelerationY: {
+            type: 'reporter',
+            category: 'sensing',
+            spec: 'current acceleration along the y axes'
+        },
+        reportAccelerationZ: {
+            type: 'reporter',
+            category: 'sensing',
+            spec: 'current acceleration along the z axes'
         },
         reportLanguage: {
             type: 'reporter',
@@ -1818,6 +1848,8 @@ SpriteMorph.prototype.blockTemplates = function (category) {
         blocks.push('-');
         blocks.push(block('comeToFront'));
         blocks.push(block('goBack'));
+        blocks.push('-');
+        blocks.push(block('doNotify'));
 
     // for debugging: ///////////////
 
@@ -1988,6 +2020,14 @@ SpriteMorph.prototype.blockTemplates = function (category) {
         blocks.push('-');
         blocks.push(block('reportLanguage'));
         blocks.push(block('reportLocation'));
+        blocks.push('-');
+        blocks.push(block('doVibrate'));
+        blocks.push('-');
+        blocks.push(block('reportCompassHeading'));
+        blocks.push('-');
+        blocks.push(block('reportAccelerationX'));
+        blocks.push(block('reportAccelerationY'));
+        blocks.push(block('reportAccelerationZ'));
 
     // for debugging: ///////////////
 
@@ -4434,6 +4474,8 @@ StageMorph.prototype.init = function (globals) {
     this.paletteCache = {}; // not to be serialized (!)
     this.lastAnswer = ''; // last user input, do not persist
     this.activeSounds = []; // do not persist
+    this.acceleration = null; // do not persist
+    this.compassHeading = null; // do not persist
     this.streamingCamera = false;
     this.lastCameraCanvas = null;
     this.lastCameraMotion = new Point(0, 0);
@@ -5082,6 +5124,8 @@ StageMorph.prototype.blockTemplates = function (category) {
         blocks.push('-');
         blocks.push(block('show'));
         blocks.push(block('hide'));
+        blocks.push('-');
+        blocks.push(block('doNotify'));
 
     // for debugging: ///////////////
 
@@ -5230,6 +5274,14 @@ StageMorph.prototype.blockTemplates = function (category) {
         blocks.push('-');
         blocks.push(block('reportLanguage'));
         blocks.push(block('reportLocation'));
+        blocks.push('-');
+        blocks.push(block('doVibrate'));
+        blocks.push('-');
+        blocks.push(block('reportCompassHeading'));
+        blocks.push('-');
+        blocks.push(block('reportAccelerationX'));
+        blocks.push(block('reportAccelerationY'));
+        blocks.push(block('reportAccelerationZ'));
 
     // for debugging: ///////////////
 
