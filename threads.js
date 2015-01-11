@@ -2274,6 +2274,20 @@ Process.prototype.reportTextSplit = function (string, delimiter) {
     return new List(str.split(del));
 };
 
+// Process notification operations
+
+Process.prototype.doNotify = function (title, content) {
+    // TODO webkitNotification
+    if (window.plugin) {
+        if (window.plugin.notification) {
+            window.plugin.notification.local.add({
+                message:    content,
+                title:      title
+            });
+        }
+    }
+};
+
 // Process debugging
 
 Process.prototype.alert = function (data) {
@@ -2794,6 +2808,114 @@ Process.prototype.reportDate = function (datefn) {
     return result;
 };
 
+Process.prototype.getCompassHeading = function () {
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
+
+    stage.compassHeading = null;
+    if (navigator.compass) {
+        navigator.compass.getCurrentHeading(
+            function (result) {
+                stage.compassHeading = result;
+            },
+            function () {
+                stage.compassHeading =
+                    {'magneticHeading': 0, 'trueHeading': 0,
+                        'headingAccuracy': 0, 'timestamp': 0};
+            }
+        );
+    } else {
+        stage.compassHeading =
+            {'magneticHeading': 0, 'trueHeading': 0,
+                'headingAccuracy': 0, 'timestamp': 0};
+    }
+};
+
+Process.prototype.reportCompassHeading = function () {
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
+
+    if (this.context.wait) {
+        if (stage.compassHeading !== null) {
+            return stage.compassHeading.magneticHeading;
+        }
+    } else {
+        this.context.wait = true;
+        this.getCompassHeading();
+    }
+    this.pushContext('doYield');
+    this.pushContext();
+};
+
+Process.prototype.getAcceleration = function () {
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
+
+    stage.acceleration = null;
+    if (navigator.accelerometer) {
+        navigator.accelerometer.getCurrentAcceleration(
+            function (result) {
+                stage.acceleration = result;
+            },
+            function () {
+                stage.acceleration =
+                    {'timestamp': 0, 'z': 0, 'y': 0, 'x': 0};
+            }
+        );
+    } else {
+        stage.acceleration =
+            {'timestamp': 0, 'z': 0, 'y': 0, 'x': 0};
+    }
+};
+
+Process.prototype.reportAccelerationX = function () {
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
+
+    if (this.context.wait) {
+        if (stage.acceleration !== null) {
+            return stage.acceleration.x;
+        }
+    } else {
+        this.context.wait = true;
+        this.getAcceleration();
+    }
+    this.pushContext('doYield');
+    this.pushContext();
+};
+
+Process.prototype.reportAccelerationY = function () {
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
+
+    if (this.context.wait) {
+        if (stage.acceleration !== null) {
+            return stage.acceleration.y;
+        }
+    } else {
+        this.context.wait = true;
+        this.getAcceleration();
+    }
+    this.pushContext('doYield');
+    this.pushContext();
+};
+
+Process.prototype.reportAccelerationZ = function () {
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
+
+    if (this.context.wait) {
+        if (stage.acceleration !== null) {
+            return stage.acceleration.z;
+        }
+    } else {
+        this.context.wait = true;
+        this.getAcceleration();
+    }
+    this.pushContext('doYield');
+    this.pushContext();
+};
+
+Process.prototype.doVibrate = function (seconds) {
+    if ("vibrate" in navigator) {
+        window.navigator.vibrate(seconds * 1000);
+    }
+};
+
 // Process code mapping
 
 /*
@@ -3203,8 +3325,6 @@ Process.prototype.reportFrameCount = function () {
     activeAudio     audio buffer for interpolated operations, don't persist
     activeNote      audio oscillator for interpolated ops, don't persist
     activeStream    video element for camera streaming, don't persist
-    isLambda        marker for return ops
-    isImplicitLambda    marker for return ops
     isCustomBlock   marker for return ops
     emptySlots      caches the number of empty slots for reification
     tag             string or number to optionally identify the Context,
@@ -3232,8 +3352,6 @@ function Context(
     this.activeAudio = null;
     this.activeNote = null;
     this.activeStream = null;
-    this.isLambda = false; // marks the end of a lambda
-    this.isImplicitLambda = false; // marks the end of a C-shaped slot
     this.isCustomBlock = false; // marks the end of a custom block's stack
     this.emptySlots = 0; // used for block reification
     this.tag = null;  // lexical catch-tag for custom blocks
