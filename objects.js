@@ -9,7 +9,7 @@
     written by Jens Mönig
     jens@moenig.org
 
-    Copyright (C) 2014 by Jens Mönig
+    Copyright (C) 2015 by Jens Mönig
 
     This file is part of Snap!.
 
@@ -125,7 +125,7 @@ PrototypeHatBlockMorph*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.objects = '2014-December-17';
+modules.objects = '2015-January-21';
 
 var SpriteMorph;
 var StageMorph;
@@ -1406,6 +1406,7 @@ SpriteMorph.prototype.init = function (globals) {
     this.anchor = null;
     this.nestingScale = 1;
     this.rotatesWithAnchor = true;
+    this.layers = null; // cache for dragging nested sprites, don't serialize
 
     this.blocksCache = {}; // not to be serialized (!)
     this.paletteCache = {}; // not to be serialized (!)
@@ -2799,7 +2800,9 @@ SpriteMorph.prototype.userMenu = function () {
     menu.addItem("duplicate", 'duplicate');
     menu.addItem("delete", 'remove');
     menu.addItem("move", 'move');
-    menu.addItem("edit", 'edit');
+    if (!this.isClone) {
+        menu.addItem("edit", 'edit');
+    }
     menu.addLine();
     if (this.anchor) {
         menu.addItem(
@@ -2815,6 +2818,7 @@ SpriteMorph.prototype.userMenu = function () {
 };
 
 SpriteMorph.prototype.exportSprite = function () {
+    if (this.isCoone) {return; }
     var ide = this.parentThatIsA(IDE_Morph);
     if (ide) {
         ide.exportSprite(this);
@@ -3308,13 +3312,11 @@ SpriteMorph.prototype.positionTalkBubble = function () {
     bubble.changed();
 };
 
-// dragging and dropping adjustments b/c of talk bubbles
+// dragging and dropping adjustments b/c of talk bubbles and parts
 
 SpriteMorph.prototype.prepareToBeGrabbed = function (hand) {
-    var bubble = this.talkBubble();
-    if (!bubble) {return null; }
     this.removeShadow();
-    bubble.hide();
+    this.recordLayers();
     if (!this.bounds.containsPoint(hand.position())) {
         this.setCenter(hand.position());
     }
@@ -3322,6 +3324,7 @@ SpriteMorph.prototype.prepareToBeGrabbed = function (hand) {
 };
 
 SpriteMorph.prototype.justDropped = function () {
+    this.restoreLayers();
     this.positionTalkBubble();
 };
 
@@ -3697,6 +3700,7 @@ SpriteMorph.prototype.mouseClickLeft = function () {
 };
 
 SpriteMorph.prototype.mouseDoubleClick = function () {
+    if (this.isClone) {return; }
     this.edit();
 };
 
@@ -4216,6 +4220,33 @@ SpriteMorph.prototype.allAnchors = function () {
         result = result.concat(this.anchor.allAnchors());
     }
     return result;
+};
+
+SpriteMorph.prototype.recordLayers = function () {
+    var stage = this.parentThatIsA(StageMorph);
+    if (!stage) {
+        this.layerCache = null;
+        return;
+    }
+    this.layers = this.allParts();
+    this.layers.forEach(function (part) {
+        var bubble = part.talkBubble();
+        if (bubble) {bubble.hide(); }
+    });
+    this.layers.sort(function (x, y) {
+        return stage.children.indexOf(x) < stage.children.indexOf(y) ?
+                -1 : 1;
+    });
+};
+
+SpriteMorph.prototype.restoreLayers = function () {
+    if (this.layers && this.layers.length > 1) {
+        this.layers.forEach(function (sprite) {
+            sprite.comeToFront();
+            sprite.positionTalkBubble();
+        });
+    }
+    this.layers = null;
 };
 
 // SpriteMorph highlighting
