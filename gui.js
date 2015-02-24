@@ -484,7 +484,7 @@ IDE_Morph.prototype.openIn = function (world) {
                             myself.shield.destroy();
                             myself.shield = null;
                             msg.destroy();
-                            myself.toggleAppMode(true);
+                            myself.toggleAppMode(false);
                         }
                     ]);
                 },
