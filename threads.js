@@ -83,7 +83,7 @@ ArgLabelMorph, localize, XML_Element, hex_sha512*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.threads = '2015-January-12';
+modules.threads = '2015-February-28';
 
 var ThreadManager;
 var Process;
@@ -1966,7 +1966,7 @@ Process.prototype.reportTypeOf = function (thing) {
     if (thing === true || (thing === false)) {
         return 'Boolean';
     }
-    if (!isNaN(filterFloat(thing))) {
+    if (!isNaN(+thing)) {
         return 'number';
     }
     if (isString(thing)) {
