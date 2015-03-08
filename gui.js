@@ -250,6 +250,7 @@ IDE_Morph.prototype.init = function (isAutoFill) {
     this.color = this.backgroundColor;
 
     setInterval(this.save, 1000 * 60 * 60 * 5); // every 5 minutes
+    window.peers = [];
 };
 
 IDE_Morph.prototype.openIn = function (world) {
