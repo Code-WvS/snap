@@ -17,7 +17,15 @@ then
     echo "  Mobile      amazon-fireos android blackberry10 firefoxos ios ubuntu wp8 win8 tizen"
     echo "  Desktop     win32 win64 osx linux32 linux64"
     echo ""
-    echo "If FILE/URL is given, it will be #open-ed inside Snap\! immediately. URL will be loaded at runtime."
+    echo "If FILE/URL is given, it will be #open-ed inside Snap! immediately. URL will be loaded at runtime."
+    echo ""
+    echo ""
+    echo "The following environment variables will be used, if available:"
+    echo "  snapsource  Path or URL to the Snap! git repository. This repository must contain the branch"
+    echo "              mobileapp with the configuration files! Default: https://github.com/Gubolin/snap.git"
+    echo "  crosswalk   Path to a crosswalk-cordova directory. Download \"Cordova Android\" here:"
+    echo "              https://crosswalk-project.org/documentation/downloads.html"
+    echo "              If omitted, standard cordova will be used."
     exit 0
 fi
 
@@ -28,23 +36,12 @@ scriptdir=$(readlink -e ".")
 # UglifyJS2 (https://github.com/mishoo/UglifyJS2)
 
 ide=true
-url=false
 platform=$2
 
 # presentation mode
 if [[ "$3" != "" ]]
 then
     ide=false
-fi
-
-if [ $ide == false ]
-then
-   if [ -f "$3" ]
-    then
-        content="'$(cat $3)'"
-    else
-        url=true
-    fi
 fi
 
 buildsource=$(mktemp -d)
@@ -57,36 +54,33 @@ rm -rf .git/
 if [ $ide == false ]
 then
     # minimize everything
-    rm lang* ypr.js paint.js cloud.js gui.js
-    rm -r help/
+    rm lang* ypr.js paint.js cloud.js gui.js *.sh *.pdf *.txt
+    rm -r help/ Costumes/ Backgrounds/ Sounds/
 
     sed -i '/paint\.js"/d' snap.html
     sed -i '/cloud\.js"/d' snap.html
     sed -i 's/gui\.js"/binary\.js"/' snap.html
 
-    # load custom project from file or url
-    if [ $url == false ]
+    # if a file was given, move it to "project.xml"
+    # it will be loaded like an URL then
+    if [ -f "$3" ]
     then
-        sed -i '/sha512\.js"/a\
-                <script type="text/javascript" src="code.js"></script> ' snap.html
-
-        echo "var code =" > code.js
-        echo "$content" >> code.js
-        echo ";" >> code.js
-
-        sed -i "/ide\.openIn/a\
-            ide.droppedText(code); " snap.html
+        cp "$3" "project.xml"
+        url="project.xml"
     else
-        sed -i "/ide\.openIn/a\
-            ide.droppedText(ide.getURL('$3')); " snap.html
+        url=$3
     fi
+
+    # load custom project from url
+    sed -i "/ide\.openIn/a\
+        ide.droppedText(ide.getURL('$url')); " snap.html
 
 else
     rm binary.js
 fi
 
 # compress all js files
-find . -name '*.js' | xargs -I {} uglifyjs {} -o {} -c
+find . -name '*.js' | xargs -I {} uglifyjs {} -o {} -c 2> /dev/null
 
 # return to the directory where the script was called from
 cd "$scriptdir"

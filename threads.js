@@ -83,7 +83,7 @@ ArgLabelMorph, localize, XML_Element, hex_sha512*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.threads = '2015-January-12';
+modules.threads = '2015-February-28';
 
 var ThreadManager;
 var Process;
@@ -1320,6 +1320,56 @@ Process.prototype.doRemoveTemporaries = function () {
     }
 };
 
+// Peer to peer primitives
+
+Process.prototype.sendPeerMessage = function (message, peer) {
+    var myself = this;
+
+    if (peer instanceof List) {
+        peer.asArray().forEach(function (singlePeer) {
+            myself.sendPeerMessage(message, singlePeer);
+        });
+        return;
+    }
+
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph),
+        ide = this.homeContext.receiver.parentThatIsA(IDE_Morph);
+    var connection = stage.peer.connect(peer, {reliable: true});
+    connection.on('open', function () {
+        var data;
+        if (typeof message == "string") {
+            data = message;
+        } else if (typeof message == "function") {
+            data = message.toString();
+        } else {
+            data = ide.serializer.serialize(message);
+        }
+        connection.send(data);
+    });
+};
+
+Process.prototype.reportPeerList = function () {
+    var myself = this;
+
+    if (!this.context.wait) {
+        var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
+        stage.peer.listAllPeers(function (peers) {
+            myself.context.result = new List(peers);
+        });
+        this.context.wait = true;
+    } else if (this.context.result) {
+        return this.context.result;
+    }
+
+    this.pushContext('doYield');
+    this.pushContext();
+};
+
+Process.prototype.reportPeerId = function () {
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
+    return stage.peerId;
+};
+
 // Process lists primitives
 
 Process.prototype.reportNewList = function (elements) {
@@ -1969,7 +2019,7 @@ Process.prototype.reportTypeOf = function (thing) {
     if (thing === true || (thing === false)) {
         return 'Boolean';
     }
-    if (!isNaN(filterFloat(thing))) {
+    if (!isNaN(+thing)) {
         return 'number';
     }
     if (isString(thing)) {
