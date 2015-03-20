@@ -155,7 +155,7 @@ DialogBoxMorph, BlockInputFragmentMorph, PrototypeHatBlockMorph, Costume*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.blocks = '2015-March-06';
+modules.blocks = '2015-March-09';
 
 
 var SyntaxElementMorph;
@@ -340,7 +340,7 @@ SyntaxElementMorph.prototype.setScale = function (num) {
 };
 
 SyntaxElementMorph.prototype.setScale(1);
-SyntaxElementMorph.prototype.isCachingInputs = true;
+SyntaxElementMorph.prototype.isCachingInputs = false;
 
 // SyntaxElementMorph instance creation:
 
@@ -400,10 +400,14 @@ SyntaxElementMorph.prototype.debugCachedInputs = function () {
     }
     for (i = 0; i < realInputs.length; i += 1) {
         if (this.cachedInputs[i] !== realInputs[i]) {
-            throw new Error('cached input does not match ' +
+            throw new Error('cached input does not match: ' +
                 this.constructor.name +
+                ' #' +
+                i +
                 ' ' +
-                i);
+                this.cachedInputs[i].constructor.name +
+                ' != ' +
+                realInputs[i].constructor.name);
         }
     }
 };
@@ -1960,6 +1964,7 @@ BlockMorph.uber = SyntaxElementMorph.prototype;
 
 // BlockMorph preferences settings:
 
+BlockMorph.prototype.isCachingInputs = true;
 BlockMorph.prototype.zebraContrast = 40; // alternating color brightness
 
 // BlockMorph sound feedback:
@@ -3080,6 +3085,9 @@ BlockMorph.prototype.fullCopy = function () {
         ans.setSpec(this.instantiationSpec);
     }
     ans.allChildren().filter(function (block) {
+        if (block instanceof SyntaxElementMorph) {
+            block.cachedInputs = null;
+        }
         return !isNil(block.comment);
     }).forEach(function (block) {
         var cmnt = block.comment.fullCopy();
@@ -9276,10 +9284,6 @@ MultiArgMorph.prototype = new ArgMorph();
 MultiArgMorph.prototype.constructor = MultiArgMorph;
 MultiArgMorph.uber = ArgMorph.prototype;
 
-// MultiArgMorph preferences settings
-
-MultiArgMorph.prototype.isCachingInputs = false;
-
 // MultiArgMorph instance creation:
 
 function MultiArgMorph(
@@ -9709,10 +9713,6 @@ MultiArgMorph.prototype.isEmptySlot = function () {
 ArgLabelMorph.prototype = new ArgMorph();
 ArgLabelMorph.prototype.constructor = ArgLabelMorph;
 ArgLabelMorph.uber = ArgMorph.prototype;
-
-// ArgLabelMorph preferences settings
-
-ArgLabelMorph.prototype.isCachingInputs = false;
 
 // MultiArgMorph instance creation:
 
