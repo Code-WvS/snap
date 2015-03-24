@@ -4754,55 +4754,11 @@ StageMorph.prototype.init = function (globals) {
     this.acceptsDrops = false;
     this.setColor(new Color(255, 255, 255));
     this.fps = this.frameRate;
-
-    this.initPeering();
-};
-
-StageMorph.prototype.initPeering = function (id) {
-    var myself = this;
-
-    if (window.peers) {
-        // I don't know why, but it works.
-        window.peers.forEach(function (oldpeer) {
-            if (id != oldpeer.id) {
-                oldpeer.destroy()
-            }
-        });
-    }
-
-    this.peer = new Peer(id, {
-        host: 'snapmesh.herokuapp.com',
-        port: 443,
-        secure: true,
-        path: '/'
-    });
-
-    this.peer.on('open', function (id) {
-        myself.peerId = id;
-    });
-    this.peer.on('disconnected', function () {
-        // peer.reconnect does not work (?) because 'id' is undefined
-        if (!myself.peer.destroyed) {
-            myself.initPeering(myself.peerId);
-        }
-    });
-    this.peer.on('error', function (err) {
-        console.log(err); // DEBUG
-    });
-
-    this.peer.on('connection', function (connection) {
-        connection.on('open', function () {
-            connection.on('data', function (data) {
-                myself.newPeerMessage(data, connection.peer);
-            });
-        });
-    });
-
-    window.peers.push(this.peer);
 };
 
 StageMorph.prototype.newPeerMessage = function (data, peer) {
     var ide = this.parentThatIsA(IDE_Morph);
+    if (!ide || !peer) return;
     var myself = this;
     var hats = [], model, message;
 
