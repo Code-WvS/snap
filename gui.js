@@ -69,7 +69,7 @@ SpeechBubbleMorph*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.gui = '2015-March-15';
+modules.gui = '2015-March-21';
 
 // Declarations
 
@@ -2711,7 +2711,7 @@ IDE_Morph.prototype.aboutSnap = function () {
         module, btn1, btn2, btn3, btn4, licenseBtn, translatorsBtn,
         world = this.world();
 
-    aboutTxt = 'Snap! 4.0\nBuild Your Own Blocks\n\n--- rc ---\n\n'
+    aboutTxt = 'Snap! 4.1 (OOP)\nBuild Your Own Blocks\n\n--- dev ---\n\n'
         + 'Copyright \u24B8 2015 Jens M\u00F6nig and '
         + 'Brian Harvey\n'
         + 'jens@moenig.org, bh@cs.berkeley.edu\n\n'
@@ -5650,7 +5650,7 @@ function SpriteIconMorph(aSprite, aTemplate) {
 }
 
 SpriteIconMorph.prototype.init = function (aSprite, aTemplate) {
-    var colors, action, query, myself = this;
+    var colors, action, query, hover, myself = this;
 
     if (!aTemplate) {
         colors = [
@@ -5680,6 +5680,11 @@ SpriteIconMorph.prototype.init = function (aSprite, aTemplate) {
         return false;
     };
 
+    hover = function () {
+        if (!aSprite.exemplar) {return null; }
+        return (localize('parent' + ':\n' + aSprite.exemplar.name));
+    };
+
     // additional properties:
     this.object = aSprite || new SpriteMorph(); // mandatory, actually
     this.version = this.object.version;
@@ -5695,7 +5700,7 @@ SpriteIconMorph.prototype.init = function (aSprite, aTemplate) {
         this.object.name, // label string
         query, // predicate/selector
         null, // environment
-        null, // hint
+        hover, // hint
         aTemplate // optional, for cached background images
     );
 
@@ -5866,6 +5871,7 @@ SpriteIconMorph.prototype.userMenu = function () {
     menu.addItem("duplicate", 'duplicateSprite');
     menu.addItem("delete", 'removeSprite');
     menu.addLine();
+    menu.addItem("parent...", 'chooseExemplar');
     if (this.object.anchor) {
         menu.addItem(
             localize('detach from') + ' ' + this.object.anchor.name,
@@ -5898,6 +5904,10 @@ SpriteIconMorph.prototype.removeSprite = function () {
 
 SpriteIconMorph.prototype.exportSprite = function () {
     this.object.exportSprite();
+};
+
+SpriteIconMorph.prototype.chooseExemplar = function () {
+    this.object.chooseExemplar();
 };
 
 SpriteIconMorph.prototype.showSpriteOnStage = function () {

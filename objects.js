@@ -125,7 +125,7 @@ PrototypeHatBlockMorph*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.objects = '2015-February-28';
+modules.objects = '2015-March-24';
 
 var SpriteMorph;
 var StageMorph;
@@ -1192,6 +1192,13 @@ SpriteMorph.prototype.initBlocks = function () {
             spec: 'script variables %scriptVars'
         },
 
+        // inheritance - experimental
+        doDeleteAttr: {
+            type: 'command',
+            category: 'variables',
+            spec: 'delete %shd'
+        },
+
         // Lists
         reportNewList: {
             type: 'reporter',
@@ -1462,11 +1469,13 @@ SpriteMorph.prototype.init = function (globals) {
                             'confetti': 0
                          };
 
+    // sprite inheritance
+    this.exemplar = null;
+
     SpriteMorph.uber.init.call(this);
 
     this.isDraggable = true;
     this.isDown = false;
-
     this.heading = 90;
     this.changed();
     this.drawNew();
@@ -1759,7 +1768,8 @@ SpriteMorph.prototype.variableBlock = function (varName) {
 
 SpriteMorph.prototype.blockTemplates = function (category) {
     var blocks = [], myself = this, varNames, button,
-        cat = category || 'motion', txt;
+        cat = category || 'motion', txt,
+        inheritedVars = this.inheritedVariableNames();
 
     function block(selector) {
         if (StageMorph.prototype.hiddenPrimitives[selector]) {
@@ -1774,6 +1784,9 @@ SpriteMorph.prototype.blockTemplates = function (category) {
         var newBlock = SpriteMorph.prototype.variableBlock(varName);
         newBlock.isDraggable = false;
         newBlock.isTemplate = true;
+        if (contains(inheritedVars, varName)) {
+            newBlock.ghost();
+        }
         return newBlock;
     }
 
@@ -1822,15 +1835,18 @@ SpriteMorph.prototype.blockTemplates = function (category) {
     }
 
     function addVar(pair) {
+        var ide;
         if (pair) {
-            if (myself.variables.silentFind(pair[0])) {
+            if (myself.isVariableNameInUse(pair[0], pair[1])) {
                 myself.inform('that name is already in use');
             } else {
+                ide = myself.parentThatIsA(IDE_Morph);
                 myself.addVariable(pair[0], pair[1]);
-                myself.toggleVariableWatcher(pair[0], pair[1]);
-                myself.blocksCache[cat] = null;
-                myself.paletteCache[cat] = null;
-                myself.parentThatIsA(IDE_Morph).refreshPalette();
+                if (!myself.showingVariableWatcher(pair[0])) {
+                    myself.toggleVariableWatcher(pair[0], pair[1]);
+                }
+                ide.flushBlocksCache('variables'); // b/c of inheritance
+                ide.refreshPalette();
             }
         }
     }
@@ -2168,7 +2184,7 @@ SpriteMorph.prototype.blockTemplates = function (category) {
         button.showHelp = BlockMorph.prototype.showHelp;
         blocks.push(button);
 
-        if (this.variables.allNames().length > 0) {
+        if (this.deletableVariableNames().length > 0) {
             button = new PushButtonMorph(
                 null,
                 function () {
@@ -2177,7 +2193,7 @@ SpriteMorph.prototype.blockTemplates = function (category) {
                         null,
                         myself
                     );
-                    myself.variables.allNames().forEach(function (name) {
+                    myself.deletableVariableNames().forEach(function (name) {
                         menu.addItem(name, name);
                     });
                     menu.popUpAtHand(myself.world());
@@ -2206,6 +2222,13 @@ SpriteMorph.prototype.blockTemplates = function (category) {
         blocks.push(block('doShowVar'));
         blocks.push(block('doHideVar'));
         blocks.push(block('doDeclareVariables'));
+
+    // inheritance:
+
+        blocks.push('-');
+        blocks.push(block('doDeleteAttr'));
+
+    ///////////////////////////////
 
         blocks.push('=');
 
@@ -2638,7 +2661,7 @@ SpriteMorph.prototype.searchBlocks = function () {
 SpriteMorph.prototype.addVariable = function (name, isGlobal) {
     var ide = this.parentThatIsA(IDE_Morph);
     if (isGlobal) {
-        this.variables.parentFrame.addVar(name);
+        this.globalVariables().addVar(name);
         if (ide) {
             ide.flushBlocksCache('variables');
         }
@@ -2650,7 +2673,10 @@ SpriteMorph.prototype.addVariable = function (name, isGlobal) {
 
 SpriteMorph.prototype.deleteVariable = function (varName) {
     var ide = this.parentThatIsA(IDE_Morph);
-    this.deleteVariableWatcher(varName);
+    if (!contains(this.inheritedVariableNames(true), varName)) {
+        // check only shadowed variables
+        this.deleteVariableWatcher(varName);
+    }
     this.variables.deleteVar(varName);
     if (ide) {
         ide.flushBlocksCache('variables'); // b/c the var could be global
@@ -3853,6 +3879,7 @@ SpriteMorph.prototype.reportThreadCount = function () {
 
 SpriteMorph.prototype.findVariableWatcher = function (varName) {
     var stage = this.parentThatIsA(StageMorph),
+        globals = this.globalVariables(),
         myself = this;
     if (stage === null) {
         return null;
@@ -3862,7 +3889,7 @@ SpriteMorph.prototype.findVariableWatcher = function (varName) {
         function (morph) {
             return morph instanceof WatcherMorph
                     && (morph.target === myself.variables
-                            || morph.target === myself.variables.parentFrame)
+                            || morph.target === globals)
                     && morph.getter === varName;
         }
     );
@@ -3870,6 +3897,7 @@ SpriteMorph.prototype.findVariableWatcher = function (varName) {
 
 SpriteMorph.prototype.toggleVariableWatcher = function (varName, isGlobal) {
     var stage = this.parentThatIsA(StageMorph),
+        globals = this.globalVariables(),
         watcher,
         others;
     if (stage === null) {
@@ -3889,12 +3917,12 @@ SpriteMorph.prototype.toggleVariableWatcher = function (varName, isGlobal) {
 
     // if no watcher exists, create a new one
     if (isNil(isGlobal)) {
-        isGlobal = contains(this.variables.parentFrame.names(), varName);
+        isGlobal = contains(globals.names(), varName);
     }
     watcher = new WatcherMorph(
         varName,
         this.blockColor.variables,
-        isGlobal ? this.variables.parentFrame : this.variables,
+        isGlobal ? globals : this.variables,
         varName
     );
     watcher.setPosition(stage.position().add(10));
@@ -4318,6 +4346,129 @@ SpriteMorph.prototype.restoreLayers = function () {
         });
     }
     this.layers = null;
+};
+
+// SpriteMorph inheritance - general
+
+SpriteMorph.prototype.chooseExemplar = function () {
+    var stage = this.parentThatIsA(StageMorph),
+        myself = this,
+        other = stage.children.filter(function (m) {
+            return m instanceof SpriteMorph &&
+                (!contains(m.allExemplars(), myself));
+        }),
+        menu;
+    menu = new MenuMorph(
+        function (aSprite) {myself.setExemplar(aSprite); },
+        localize('current parent') +
+            ':\n' +
+            (this.exemplar ? this.exemplar.name : localize('none'))
+    );
+    other.forEach(function (eachSprite) {
+        menu.addItem(eachSprite.name, eachSprite);
+    });
+    menu.addLine();
+    menu.addItem(localize('none'), null);
+    menu.popUpAtHand(this.world());
+};
+
+SpriteMorph.prototype.setExemplar = function (another) {
+    var ide = this.parentThatIsA(IDE_Morph);
+    this.exemplar = another;
+    if (isNil(another)) {
+        this.variables.parentFrame = (this.globalVariables());
+    } else {
+        this.variables.parentFrame = (another.variables);
+    }
+    if (ide) {
+        ide.flushBlocksCache('variables');
+        ide.refreshPalette();
+    }
+};
+
+SpriteMorph.prototype.allExemplars = function () {
+    // including myself
+    var all = [],
+        current = this;
+    while (!isNil(current)) {
+        all.push(current);
+        current = current.exemplar;
+    }
+    return all;
+};
+
+SpriteMorph.prototype.specimens = function () {
+    // without myself
+    var myself = this;
+    return this.siblings().filter(function (m) {
+        return m instanceof SpriteMorph && (m.exemplar === myself);
+    });
+};
+
+SpriteMorph.prototype.allSpecimens = function () {
+    // without myself
+    var myself = this;
+    return this.siblings().filter(function (m) {
+        return m instanceof SpriteMorph && contains(m.allExemplars(), myself);
+    });
+};
+
+// SpriteMorph inheritance - variables
+
+SpriteMorph.prototype.isVariableNameInUse = function (vName, isGlobal) {
+    if (isGlobal) {
+        return contains(this.variables.allNames(), vName);
+    }
+    if (contains(this.variables.names(), vName)) {return true; }
+    return contains(this.globalVariables().names(), vName);
+};
+
+SpriteMorph.prototype.globalVariables = function () {
+    var current = this.variables.parentFrame;
+    while (current.owner) {
+        current = current.parentFrame;
+    }
+    return current;
+};
+
+SpriteMorph.prototype.shadowVar = function (name, value) {
+    var ide = this.parentThatIsA(IDE_Morph);
+    this.variables.addVar(name, value);
+    if (ide) {
+        ide.flushBlocksCache('variables');
+        ide.refreshPalette();
+    }
+};
+
+SpriteMorph.prototype.inheritedVariableNames = function (shadowedOnly) {
+    var names = [],
+        own = this.variables.names(),
+        current = this.variables.parentFrame;
+
+    function test(each) {
+        return shadowedOnly ? contains(own, each) : !contains(own, each);
+    }
+
+    while (current.owner instanceof SpriteMorph) {
+        names.push.apply(
+            names,
+            current.names().filter(test)
+        );
+        current = current.parentFrame;
+    }
+    return names;
+};
+
+SpriteMorph.prototype.deletableVariableNames = function () {
+    var locals = this.variables.names(),
+        inherited = this.inheritedVariableNames();
+    return locals.concat(
+        this.globalVariables().names().filter(
+            function (each) {
+                return !contains(locals, each) && !contains(inherited, each);
+            }
+        )
+    );
 };
 
 // SpriteMorph highlighting
@@ -5282,7 +5433,7 @@ StageMorph.prototype.blockTemplates = function (category) {
 
     function addVar(pair) {
         if (pair) {
-            if (myself.variables.silentFind(pair[0])) {
+            if (myself.isVariableNameInUse(pair[0])) {
                 myself.inform('that name is already in use');
             } else {
                 myself.addVariable(pair[0], pair[1]);
@@ -5608,9 +5759,7 @@ StageMorph.prototype.blockTemplates = function (category) {
         blocks.push(block('doShowVar'));
         blocks.push(block('doHideVar'));
         blocks.push(block('doDeclareVariables'));
-
         blocks.push('=');
-
         blocks.push(block('reportNewList'));
         blocks.push('-');
         blocks.push(block('reportCONS'));
@@ -6032,6 +6181,18 @@ StageMorph.prototype.doubleDefinitionsFor
 
 StageMorph.prototype.replaceDoubleDefinitionsFor
     = SpriteMorph.prototype.replaceDoubleDefinitionsFor;
+
+// StageMorph inheritance support - variables
+
+StageMorph.prototype.isVariableNameInUse
+    = SpriteMorph.prototype.isVariableNameInUse;
+
+StageMorph.prototype.globalVariables
+    = SpriteMorph.prototype.globalVariables;
+
+StageMorph.prototype.inheritedVariableNames = function () {
+    return [];
+};
 
 // SpriteBubbleMorph ////////////////////////////////////////////////////////
 
@@ -7257,32 +7418,51 @@ WatcherMorph.prototype.isGlobal = function (selector) {
 
 // WatcherMorph slider accessing:
 
-WatcherMorph.prototype.setSliderMin = function (num) {
+WatcherMorph.prototype.setSliderMin = function (num, noUpdate) {
     if (this.target instanceof VariableFrame) {
-        this.sliderMorph.setSize(1);
-        this.sliderMorph.setStart(num);
-        this.sliderMorph.setSize(this.sliderMorph.rangeSize() / 5);
+        this.sliderMorph.setSize(1, noUpdate);
+        this.sliderMorph.setStart(num, noUpdate);
+        this.sliderMorph.setSize(this.sliderMorph.rangeSize() / 5, noUpdate);
     }
 };
 
-WatcherMorph.prototype.setSliderMax = function (num) {
+WatcherMorph.prototype.setSliderMax = function (num, noUpdate) {
     if (this.target instanceof VariableFrame) {
-        this.sliderMorph.setSize(1);
-        this.sliderMorph.setStop(num);
-        this.sliderMorph.setSize(this.sliderMorph.rangeSize() / 5);
+        this.sliderMorph.setSize(1, noUpdate);
+        this.sliderMorph.setStop(num, noUpdate);
+        this.sliderMorph.setSize(this.sliderMorph.rangeSize() / 5, noUpdate);
     }
 };
 
 // WatcherMorph updating:
 
 WatcherMorph.prototype.update = function () {
-    var newValue,
-        num;
+    var newValue, sprite, num;
+
     if (this.target && this.getter) {
         this.updateLabel();
         if (this.target instanceof VariableFrame) {
             newValue = this.target.vars[this.getter] ?
                     this.target.vars[this.getter].value : undefined;
+            if (newValue === undefined && this.target.owner) {
+                sprite = this.target.owner;
+                if (contains(sprite.inheritedVariableNames(), this.getter)) {
+                    newValue = this.target.getVar(this.getter);
+                    // ghost cell color
+                    this.cellMorph.setColor(
+                        SpriteMorph.prototype.blockColor.variables
+                            .lighter(35)
+                    );
+                } else {
+                    this.destroy();
+                    return;
+                }
+            } else {
+                // un-ghost the cell color
+                this.cellMorph.setColor(
+                    SpriteMorph.prototype.blockColor.variables
+                );
+            }
         } else {
             newValue = this.target[this.getter]();
         }
@@ -7367,7 +7547,11 @@ WatcherMorph.prototype.fixLayout = function () {
         this.sliderMorph.button.pressColor.b += 100;
         this.sliderMorph.setHeight(fontSize);
         this.sliderMorph.action = function (num) {
-            myself.target.vars[myself.getter].value = Math.round(num);
+            myself.target.setVar(
+                myself.getter,
+                Math.round(num),
+                myself.target.owner
+            );
         };
         this.add(this.sliderMorph);
     }
