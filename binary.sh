@@ -18,6 +18,8 @@ then
     echo "  Desktop     win32 win64 osx linux32 linux64"
     echo ""
     echo "If FILE/URL is given, it will be #open-ed inside Snap! immediately. URL will be loaded at runtime."
+    echo "If URL starts with a hash ('#'), it will be used as initial base url suffix"
+    echo " (for example '#present:UserName=foo\&ProjectName=bar', escape the '&')."
     echo ""
     echo ""
     echo "The following environment variables will be used, if available:"
@@ -49,17 +51,11 @@ git clone $snapsource $buildsource
 cd "$buildsource"
 git checkout mobileapp
 
-rm -rf .git/
-
 if [ $ide == false ]
 then
     # minimize everything
-    rm lang* ypr.js paint.js cloud.js gui.js *.sh *.pdf *.txt
+    rm *.sh *.pdf *.txt
     rm -r help/ Costumes/ Backgrounds/ Sounds/
-
-    sed -i '/paint\.js"/d' snap.html
-    sed -i '/cloud\.js"/d' snap.html
-    sed -i 's/gui\.js"/binary\.js"/' snap.html
 
     # if a file was given, move it to "project.xml"
     # it will be loaded like an URL then
@@ -71,12 +67,17 @@ then
         url=$3
     fi
 
-    # load custom project from url
-    sed -i "/ide\.openIn/a\
-        ide.droppedText(ide.getURL('$url')); " snap.html
-
-else
-    rm binary.js
+    if [[ $url == \#* ]]
+    then
+        # load custom project from cloud or string
+        sed -i "s/snap.html/snap.html${url}/g" config.xml package.json
+    else
+        # load custom project from url
+        sed -i "/ide\.openIn/a\
+            ide.droppedText(ide.getURL('$url'));" snap.html
+        sed -i "/this.toggleAppMode(false)/d" gui.js
+        sed -i "s/snap.html/snap.html#run:/g" config.xml package.json
+    fi
 fi
 
 # compress all js files
