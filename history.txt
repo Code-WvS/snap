@@ -2488,3 +2488,7 @@ ______
 150323
 ------
 * OOP: Morphic, Objects, Store - tweak inherited variable watcher slider deserialization
+
+150325
+------
+* Threads: fixed #752
