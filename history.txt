@@ -2492,3 +2492,4 @@ ______
 150325
 ------
 * Threads: fixed #752
+* OOP: integrated and adjusted fix for #752

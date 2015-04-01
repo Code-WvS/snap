@@ -1182,7 +1182,8 @@ Process.prototype.doSetVar = function (varName, value) {
         if (name.expression.selector === 'reportGetVar') {
             name.variables.setVar(
                 name.expression.blockSpec,
-                value
+                value,
+                this.blockReceiver()
             );
             return;
         }
@@ -1198,7 +1199,8 @@ Process.prototype.doChangeVar = function (varName, value) {
         if (name.expression.selector === 'reportGetVar') {
             name.variables.changeVar(
                 name.expression.blockSpec,
-                value
+                value,
+                this.blockReceiver()
             );
             return;
         }
