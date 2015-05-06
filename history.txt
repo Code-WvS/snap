@@ -2493,3 +2493,20 @@ ______
 ------
 * Threads: fixed #752
 * OOP: integrated and adjusted fix for #752
+
+150415
+------
+* Threads: flush Stage>>keysPressed when prompting the user
+* Objects: fixed #770
+
+150415
+------
+* OOP: Objects, Prototypal inheritance of sprite-local custom blocks (palette only)
+
+150501
+------
+* Morphic, Blocks: select all text when first clicking an input slot
+* BYOB: indicate numeric inputs in the block prototype with the # sign
+* Threads: return empty string when querying first letter of a list
+* GUI: hide “save to disk” option behind shift-click again (has issues in Chrome)
+* GUI: parameters for embedding projects in iFrames, thanks, Bernat!
