@@ -69,7 +69,7 @@ SpeechBubbleMorph*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.gui = '2015-February-28';
+modules.gui = '2015-June-25';
 
 // Declarations
 
@@ -81,6 +81,11 @@ var TurtleIconMorph;
 var WardrobeMorph;
 var SoundIconMorph;
 var JukeboxMorph;
+
+// Get the full url without "snap.html"
+var baseUrl = document.URL.split('/');
+baseUrl.pop(baseUrl.length - 1);
+baseUrl = baseUrl.join('/') + '/';
 
 // IDE_Morph ///////////////////////////////////////////////////////////
 
@@ -251,6 +256,36 @@ IDE_Morph.prototype.init = function (isAutoFill) {
 
     setInterval(this.save, 1000 * 60 * 60 * 5); // every 5 minutes
     window.peers = [];
+    this.createPeer();
+};
+
+IDE_Morph.prototype.createPeer = function() {
+    var myself = this;
+    this.peer = new Peer(this.peerId, {
+        host: 'snapmesh.herokuapp.com',
+        port: 443,
+        secure: true,
+        path: '/'
+    });
+
+    this.peer.on('open', function (id) {
+        myself.peerId = id;
+    });
+    this.peer.on('disconnected', function () {
+        myself.peer.destroy();
+        myself.createPeer();
+    });
+    this.peer.on('error', function (err) {
+        console.log(err); // DEBUG
+    });
+
+    this.peer.on('connection', function (connection) {
+        connection.on('open', function () {
+            connection.on('data', function (data) {
+                myself.stage.newPeerMessage(data, connection.peer);
+            });
+        });
+    });
 };
 
 IDE_Morph.prototype.openIn = function (world) {
@@ -409,8 +444,21 @@ IDE_Morph.prototype.openIn = function (world) {
                             myself.shield.destroy();
                             myself.shield = null;
                             msg.destroy();
-                            myself.toggleAppMode(true);
-                            myself.runScripts();
+
+                            if (dict.editMode) {
+                                myself.toggleAppMode(false);
+                            } else {
+                                myself.toggleAppMode(true);
+                            }
+
+                            if (!dict.noRun) {
+                                myself.runScripts();
+                            }
+
+                            if (dict.hideControls) {
+                                myself.controlBar.hide();
+                                window.onbeforeunload = function () {nop(); };
+                            }
                         }
                     ]);
                 },
@@ -2379,10 +2427,10 @@ IDE_Morph.prototype.settingsMenu = function () {
     addPreference(
         'Cache Inputs',
         function () {
-            SyntaxElementMorph.prototype.isCachingInputs =
-                !SyntaxElementMorph.prototype.isCachingInputs;
+            BlockMorph.prototype.isCachingInputs =
+                !BlockMorph.prototype.isCachingInputs;
         },
-        SyntaxElementMorph.prototype.isCachingInputs,
+        BlockMorph.prototype.isCachingInputs,
         'uncheck to stop caching\ninputs (for debugging the evaluator)',
         'check to cache inputs\nboosts recursion',
         true
@@ -2497,12 +2545,15 @@ IDE_Morph.prototype.projectMenu = function () {
     if (GitHub.username) {
         menu.addItem('Save with commit message', 'commitProjectToGitHub');
     }
-    menu.addItem(
-        'Save to disk',
-        'saveProjectToDisk',
-        'store this project\nin the downloads folder\n'
-            + '(in supporting browsers)'
-    );
+    if (shiftClicked) {
+        menu.addItem(
+            'Save to disk',
+            'saveProjectToDisk',
+            'store this project\nin the downloads folder\n'
+                + '(in supporting browsers)',
+            new Color(100, 0, 0)
+        );
+    }
     menu.addItem('Save As...', 'saveProjectsBrowser');
     menu.addLine();
     menu.addItem(
@@ -2588,13 +2639,10 @@ IDE_Morph.prototype.projectMenu = function () {
         function () {
             // read a list of libraries from an external file,
             var libMenu = new MenuMorph(this, 'Import library'),
-                libUrl = 'http://snap.berkeley.edu/snapsource/libraries/' +
-                    'LIBRARIES';
+                libUrl = baseUrl + 'libraries/' + 'LIBRARIES';
 
             function loadLib(name) {
-                var url = 'http://snap.berkeley.edu/snapsource/libraries/'
-                        + name
-                        + '.xml';
+                var url = baseUrl + 'libraries/' + name + '.xml';
                 myself.droppedText(myself.getURL(url), name);
             }
 
@@ -2711,7 +2759,7 @@ IDE_Morph.prototype.aboutSnap = function () {
         module, btn1, btn2, btn3, btn4, licenseBtn, translatorsBtn,
         world = this.world();
 
-    aboutTxt = 'Snap! 4.0\nBuild Your Own Blocks\n\n--- beta ---\n\n'
+    aboutTxt = 'Snap! 4.1 (OOP)\nBuild Your Own Blocks\n\n--- dev ---\n\n'
         + 'Copyright \u24B8 2015 Jens M\u00F6nig and '
         + 'Brian Harvey\n'
         + 'jens@moenig.org, bh@cs.berkeley.edu\n\n'
@@ -2745,7 +2793,7 @@ IDE_Morph.prototype.aboutSnap = function () {
 
     creditsTxt = localize('Contributors')
         + '\n\nNathan Dinsmore: Saving/Loading, Snap-Logo Design, '
-        + 'countless bugfixes'
+        + '\ncountless bugfixes and optimizations'
         + '\nKartik Chandra: Paint Editor'
         + '\nMichael Ball: Time/Date UI, many bugfixes'
         + '\n"Ava" Yuan Yuan: Graphic Effects'
@@ -3063,7 +3111,9 @@ IDE_Morph.prototype.exportGlobalBlocks = function () {
 };
 
 IDE_Morph.prototype.exportSprite = function (sprite) {
-    var str = this.serializer.serialize(sprite.allParts());
+    var str = encodeURIComponent(
+        this.serializer.serialize(sprite.allParts())
+    );
     window.open('data:text/xml,<sprites app="'
         + this.serializer.app
         + '" version="'
@@ -3693,7 +3743,6 @@ IDE_Morph.prototype.setLanguage = function (lang, callback) {
     if (lang === 'en') {
         return this.reflectLanguage('en', callback);
     }
-    myself.userLanguage = lang;
     translation = document.createElement('script');
     translation.id = 'language';
     translation.onload = function () {
@@ -4516,8 +4565,7 @@ IDE_Morph.prototype.getURLsbeOrRelative = function (url) {
     var request = new XMLHttpRequest(),
         myself = this;
     try {
-        request.open('GET', 'http://snap.berkeley.edu/snapsource/' +
-                                           url, false);
+        request.open('GET', baseUrl + url, false);
         request.send();
         if (request.status === 200) {
             return request.responseText;
@@ -4973,8 +5021,7 @@ ProjectDialogMorph.prototype.setSource = function (source) {
                 myself.nameField.setContents(item.name || '');
             }
             src = myself.ide.getURL(
-                'http://snap.berkeley.edu/snapsource/Examples/' +
-                    item.name + '.xml'
+                baseUrl + 'Examples/' + item.name + '.xml'
             );
 
             xml = myself.ide.serializer.parse(src);
@@ -5028,8 +5075,9 @@ ProjectDialogMorph.prototype.getLocalProjectList = function () {
 ProjectDialogMorph.prototype.getExamplesProjectList = function () {
     var dir,
         projects = [];
+        //alert(baseUrl);
 
-    dir = this.ide.getURL('http://snap.berkeley.edu/snapsource/Examples/');
+    dir = this.ide.getURL(baseUrl + 'Examples/');
     dir.split('\n').forEach(
         function (line) {
             var startIdx = line.search(new RegExp('href=".*xml"')),
@@ -5048,8 +5096,8 @@ ProjectDialogMorph.prototype.getExamplesProjectList = function () {
             }
         }
     );
-    projects.sort(function (x, y) {
-        return x.name < y.name ? -1 : 1;
+    projects = projects.sort(function (x, y) {
+        return x.name.toLowerCase() < y.name.toLowerCase() ? -1 : 1;
     });
     return projects;
 };
@@ -5213,10 +5261,7 @@ ProjectDialogMorph.prototype.openProject = function () {
     } else if (this.source === 'github') {
         this.openGitHubProject(proj);
     } else if (this.source === 'examples') {
-        src = this.ide.getURL(
-            'http://snap.berkeley.edu/snapsource/Examples/' +
-                proj.name + '.xml'
-        );
+        src = this.ide.getURL(baseUrl + 'Examples/' + proj.name + '.xml');
         this.ide.openProjectString(src);
         this.destroy();
     } else { // 'local'
@@ -5456,6 +5501,7 @@ ProjectDialogMorph.prototype.deleteProject = function () {
 
 ProjectDialogMorph.prototype.shareProject = function () {
     var myself = this,
+        ide = this.ide,
         proj = this.listField.selected,
         entry = this.listField.active;
 
@@ -5486,6 +5532,15 @@ ProjectDialogMorph.prototype.shareProject = function () {
                             myself.ide.cloudError(),
                             [proj.ProjectName]
                         );
+                        // Set the Shared URL if the project is currently open
+                        if (proj.ProjectName === ide.projectName) {
+                            var usr = SnapCloud.username,
+                                projectId = 'Username=' +
+                                    encodeURIComponent(usr.toLowerCase()) +
+                                    '&ProjectName=' +
+                                    encodeURIComponent(proj.projectName);
+                            location.hash = projectId;
+                        }
                     },
                     myself.ide.cloudError()
                 );
@@ -5496,6 +5551,7 @@ ProjectDialogMorph.prototype.shareProject = function () {
 
 ProjectDialogMorph.prototype.unshareProject = function () {
     var myself = this,
+        ide = this.ide,
         proj = this.listField.selected,
         entry = this.listField.active;
 
@@ -5527,6 +5583,10 @@ ProjectDialogMorph.prototype.unshareProject = function () {
                             myself.ide.cloudError(),
                             [proj.ProjectName]
                         );
+                        // Remove the shared URL if the project is open.
+                        if (proj.ProjectName === ide.projectName) {
+                            location.hash = '';
+                        }
                     },
                     myself.ide.cloudError()
                 );
@@ -5650,7 +5710,7 @@ function SpriteIconMorph(aSprite, aTemplate) {
 }
 
 SpriteIconMorph.prototype.init = function (aSprite, aTemplate) {
-    var colors, action, query, myself = this;
+    var colors, action, query, hover, myself = this;
 
     if (!aTemplate) {
         colors = [
@@ -5680,6 +5740,11 @@ SpriteIconMorph.prototype.init = function (aSprite, aTemplate) {
         return false;
     };
 
+    hover = function () {
+        if (!aSprite.exemplar) {return null; }
+        return (localize('parent' + ':\n' + aSprite.exemplar.name));
+    };
+
     // additional properties:
     this.object = aSprite || new SpriteMorph(); // mandatory, actually
     this.version = this.object.version;
@@ -5695,7 +5760,7 @@ SpriteIconMorph.prototype.init = function (aSprite, aTemplate) {
         this.object.name, // label string
         query, // predicate/selector
         null, // environment
-        null, // hint
+        hover, // hint
         aTemplate // optional, for cached background images
     );
 
@@ -5866,6 +5931,7 @@ SpriteIconMorph.prototype.userMenu = function () {
     menu.addItem("duplicate", 'duplicateSprite');
     menu.addItem("delete", 'removeSprite');
     menu.addLine();
+    menu.addItem("parent...", 'chooseExemplar');
     if (this.object.anchor) {
         menu.addItem(
             localize('detach from') + ' ' + this.object.anchor.name,
@@ -5898,6 +5964,10 @@ SpriteIconMorph.prototype.removeSprite = function () {
 
 SpriteIconMorph.prototype.exportSprite = function () {
     this.object.exportSprite();
+};
+
+SpriteIconMorph.prototype.chooseExemplar = function () {
+    this.object.chooseExemplar();
 };
 
 SpriteIconMorph.prototype.showSpriteOnStage = function () {

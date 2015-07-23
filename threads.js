@@ -83,7 +83,7 @@ ArgLabelMorph, localize, XML_Element, hex_sha512*/
 
 // Global stuff ////////////////////////////////////////////////////////
 
-modules.threads = '2015-February-28';
+modules.threads = '2015-June-25';
 
 var ThreadManager;
 var Process;
@@ -348,7 +348,7 @@ ThreadManager.prototype.findProcess = function (block) {
 */
 
 Process.prototype = {};
-Process.prototype.contructor = Process;
+Process.prototype.constructor = Process;
 Process.prototype.timeout = 500; // msecs after which to force yield
 Process.prototype.isCatchingErrors = true;
 
@@ -1178,13 +1178,17 @@ Process.prototype.doDeclareVariables = function (varNames) {
 Process.prototype.doSetVar = function (varName, value) {
     var varFrame = this.context.variables,
         name = varName;
-
     if (name instanceof Context) {
         if (name.expression.selector === 'reportGetVar') {
-            name = name.expression.blockSpec;
+            name.variables.setVar(
+                name.expression.blockSpec,
+                value,
+                this.blockReceiver()
+            );
+            return;
         }
     }
-    varFrame.setVar(name, value);
+    varFrame.setVar(name, value, this.blockReceiver());
 };
 
 Process.prototype.doChangeVar = function (varName, value) {
@@ -1193,10 +1197,15 @@ Process.prototype.doChangeVar = function (varName, value) {
 
     if (name instanceof Context) {
         if (name.expression.selector === 'reportGetVar') {
-            name = name.expression.blockSpec;
+            name.variables.changeVar(
+                name.expression.blockSpec,
+                value,
+                this.blockReceiver()
+            );
+            return;
         }
     }
-    varFrame.changeVar(name, value);
+    varFrame.changeVar(name, value, this.blockReceiver());
 };
 
 Process.prototype.reportGetVar = function () {
@@ -1241,7 +1250,7 @@ Process.prototype.doShowVar = function (varName) {
             }
             // if no watcher exists, create a new one
             isGlobal = contains(
-                this.homeContext.receiver.variables.parentFrame.names(),
+                this.homeContext.receiver.globalVariables().names(),
                 varName
             );
             if (isGlobal || target.owner) {
@@ -1324,6 +1333,8 @@ Process.prototype.doRemoveTemporaries = function () {
 
 Process.prototype.sendPeerMessage = function (message, peer) {
     var myself = this;
+    var stage = this.homeContext.receiver.parentThatIsA(StageMorph),
+        ide = this.homeContext.receiver.parentThatIsA(IDE_Morph);
 
     if (peer instanceof List) {
         peer.asArray().forEach(function (singlePeer) {
@@ -1331,10 +1342,12 @@ Process.prototype.sendPeerMessage = function (message, peer) {
         });
         return;
     }
+    if (peer == ide.peer.id) {
+        stage.newPeerMessage(message, peer);
+        return;
+    }
 
-    var stage = this.homeContext.receiver.parentThatIsA(StageMorph),
-        ide = this.homeContext.receiver.parentThatIsA(IDE_Morph);
-    var connection = stage.peer.connect(peer, {reliable: true});
+    var connection = ide.peer.connect(peer, {reliable: true});
     connection.on('open', function () {
         var data;
         if (typeof message == "string") {
@@ -1352,11 +1365,11 @@ Process.prototype.reportPeerList = function () {
     var myself = this;
 
     if (!this.context.wait) {
-        var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
-        stage.peer.listAllPeers(function (peers) {
+        this.context.wait = true;
+        var ide = this.homeContext.receiver.parentThatIsA(IDE_Morph);
+        ide.peer.listAllPeers(function (peers) {
             myself.context.result = new List(peers);
         });
-        this.context.wait = true;
     } else if (this.context.result) {
         return this.context.result;
     }
@@ -1366,8 +1379,25 @@ Process.prototype.reportPeerList = function () {
 };
 
 Process.prototype.reportPeerId = function () {
-    var stage = this.homeContext.receiver.parentThatIsA(StageMorph);
-    return stage.peerId;
+    var ide = this.homeContext.receiver.parentThatIsA(IDE_Morph);
+    return ide.peer.id;
+};
+
+// Process sprite inheritance primitives
+
+Process.prototype.doDeleteAttr = function (attrName) {
+    // currently only variables are deletable
+    var name = attrName,
+        rcvr = this.blockReceiver();
+
+    if (name instanceof Context) {
+        if (name.expression.selector === 'reportGetVar') {
+            name = name.expression.blockSpec;
+        }
+    }
+    if (contains(rcvr.inheritedVariableNames(true), name)) {
+        rcvr.deleteVariable(name);
+    }
 };
 
 // Process lists primitives
@@ -1402,6 +1432,8 @@ Process.prototype.doDeleteFromList = function (index, list) {
     }
     if (this.inputOption(index) === 'last') {
         idx = list.length();
+    } else if (isNaN(+this.inputOption(index))) {
+        return null;
     }
     list.remove(idx);
 };
@@ -1899,6 +1931,7 @@ Process.prototype.doAsk = function (data) {
         isStage = this.blockReceiver() instanceof StageMorph,
         activePrompter;
 
+    stage.keysPressed = {};
     if (!this.prompter) {
         activePrompter = detect(
             stage.children,
@@ -2205,14 +2238,14 @@ Process.prototype.reportMonadic = function (fname, n) {
     case 'ln':
         result = Math.log(x);
         break;
-    case 'log':
-        result = 0;
+    case 'log': // base 10
+        result =  Math.log(x) / Math.LN10;
         break;
     case 'e^':
         result = Math.exp(x);
         break;
     case '10^':
-        result = 0;
+        result = Math.pow(10, x);
         break;
     default:
         nop();
@@ -2268,6 +2301,9 @@ Process.prototype.reportJoinWords = function (aList) {
 // Process string ops
 
 Process.prototype.reportLetter = function (idx, string) {
+    if (string instanceof List) { // catch a common user error
+        return '';
+    }
     var i = +(idx || 0),
         str = (string || '').toString();
     return str[i - 1] || '';
@@ -2762,104 +2798,31 @@ Process.prototype.reportTimer = function () {
     return 0;
 };
 
-Process.prototype.reportLanguage = function () {
-    var ide = this.homeContext.receiver.parentThatIsA(IDE_Morph);
-    if (ide) {
-        var lang = ide.userLanguage;
-        if (lang) {
-            return lang;
-        }
-    }
-    return 'en';
-};
-
-Process.prototype.reportLocation = function (name) {
-    var myself = this;
-
-    if (!myself.context.jsonpScript) {
-        if (!navigator.geolocation) {
-            myself.handleError({name: 'Location',
-                message: 'navigator.geolocation is not supported'});
-        }
-        window.OSM_JSONP_Callback = function (data) {
-            myself.context.json = data;
-            window.OSM_JSONP_Callback = undefined;
-        };
-        myself.context.jsonpScript = document.createElement('script');
-
-        navigator.geolocation.getCurrentPosition(
-                function (pos) {
-                    var crd = pos.coords;
-
-                    myself.context.jsonpScript.src =
-                        'https://nominatim.openstreetmap.org/reverse'
-                        + '?format=json&json_callback=OSM_JSONP_Callback'
-                        + '&zoom=18&addressdetails=1'
-                        + '&lat='
-                        + crd.latitude
-                        + '&lon='
-                        + crd.longitude;
-                    document.getElementsByTagName('HEAD')[0]
-                        .appendChild(myself.context.jsonpScript);
-                },
-                function (err) {
-                    console.log(err);
-                    myself.handleError({name: 'Location', message: err});
-                },
-                { enableHightAccuracy: true, timeout: 30000, maximumAge: 0}
-        );
-    } else {
-        if (myself.context.json) {
-            switch (myself.inputOption(name)) {
-                case 'all':
-                    return myself.context.json.display_name;
-                case 'state district':
-                    return myself.context.json.address.state_district;
-                case 'house number':
-                    return myself.context.json.address.house_number;
-                case 'licence':
-                    return myself.context.json.licence;
-                case 'country':
-                case 'state':
-                case 'suburb':
-                case 'city':
-                case 'road':
-                    return myself.context.
-                        json.address[myself.inputOption(name)];
-            }
-        }
-    }
-
-    this.pushContext('doYield');
-    this.pushContext();
-};
-
 // Process Dates and times in Snap
-// Map block options to built-in functions
-var dateMap = {
-    'year' : 'getFullYear',
-    'month' : 'getMonth',
-    'date': 'getDate',
-    'day of week' : 'getDay',
-    'hour' : 'getHours',
-    'minute' : 'getMinutes',
-    'second' : 'getSeconds',
-    'time in milliseconds' : 'getTime'
-};
-
 Process.prototype.reportDate = function (datefn) {
-    var inputFn = this.inputOption(datefn),
-        currDate = new Date(),
-        func = dateMap[inputFn],
-        result = currDate[func]();
+    var currDate, func, result,
+        inputFn = this.inputOption(datefn),
+        // Map block options to built-in functions
+        dateMap = {
+            'year' : 'getFullYear',
+            'month' : 'getMonth',
+            'date': 'getDate',
+            'day of week' : 'getDay',
+            'hour' : 'getHours',
+            'minute' : 'getMinutes',
+            'second' : 'getSeconds',
+            'time in milliseconds' : 'getTime'
+        };
 
     if (!dateMap[inputFn]) { return ''; }
+    currDate = new Date();
+    func = dateMap[inputFn];
+    result = currDate[func]();
 
     // Show months as 1-12 and days as 1-7
     if (inputFn === 'month' || inputFn === 'day of week') {
         result += 1;
     }
-
     return result;
 };
 
@@ -3627,35 +3590,50 @@ VariableFrame.prototype.silentFind = function (name) {
     return null;
 };
 
-VariableFrame.prototype.setVar = function (name, value) {
-/*
-    change the specified variable if it exists
-    else throw an error, because variables need to be
-    declared explicitly (e.g. through a "script variables" block),
-    before they can be accessed.
-*/
+VariableFrame.prototype.setVar = function (name, value, sender) {
+    // change the specified variable if it exists
+    // else throw an error, because variables need to be
+    // declared explicitly (e.g. through a "script variables" block),
+    // before they can be accessed.
+    // if the found frame is inherited by the sender sprite
+    // shadow it (create an explicit one for the sender)
+    // before setting the value ("create-on-write")
+
     var frame = this.find(name);
     if (frame) {
-        frame.vars[name].value = value;
+        if (sender instanceof SpriteMorph &&
+                (frame.owner instanceof SpriteMorph) &&
+                (sender !== frame.owner)) {
+            sender.shadowVar(name, value);
+        } else {
+            frame.vars[name].value = value;
+        }
     }
 };
 
-VariableFrame.prototype.changeVar = function (name, delta) {
-/*
-    change the specified variable if it exists
-    else throw an error, because variables need to be
-    declared explicitly (e.g. through a "script variables" block,
-    before they can be accessed.
-*/
+VariableFrame.prototype.changeVar = function (name, delta, sender) {
+    // change the specified variable if it exists
+    // else throw an error, because variables need to be
+    // declared explicitly (e.g. through a "script variables" block,
+    // before they can be accessed.
+    // if the found frame is inherited by the sender sprite
+    // shadow it (create an explicit one for the sender)
+    // before changing the value ("create-on-write")
+
     var frame = this.find(name),
-        value;
+        value,
+        newValue;
     if (frame) {
         value = parseFloat(frame.vars[name].value);
-        if (isNaN(value)) {
-            frame.vars[name].value = delta;
+        newValue = isNaN(value) ? delta : value + parseFloat(delta);
+        if (sender instanceof SpriteMorph &&
+                (frame.owner instanceof SpriteMorph) &&
+                (sender !== frame.owner)) {
+            sender.shadowVar(name, newValue);
         } else {
-            frame.vars[name].value = value + parseFloat(delta);
+            frame.vars[name].value = newValue;
         }
+
     }
 };
 
